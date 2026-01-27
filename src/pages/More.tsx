@@ -119,42 +119,36 @@ export function More() {
                                         <span className="font-mono text-sm">FID: {entry.fid}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-1 text-yellow-500 font-bold">
-                                    <span>{entry.xp}</span>
-                                    <span className="text-xs">XP</span>
-                                </div>
+                                <span className="font-bold text-yellow-500">{entry.xp} XP</span>
                             </div>
                         ))
-                    )}
-                    {leaderboard.length === 0 && !loadingLeaderboard && (
-                        <div className="text-center text-gray-500 py-2">No players found yet.</div>
                     )}
                 </div>
             )}
          </div>
-         
-         <div className="p-4 flex items-center justify-between border-b border-gray-700 hover:bg-gray-750 cursor-pointer">
-            <div className="flex items-center space-x-3">
-               <Bell className="text-blue-500" size={20} />
-               <span>Notifications</span>
-            </div>
-            <div className="flex items-center space-x-2 text-gray-500">
-               <span className="text-xs bg-gray-700 px-2 py-0.5 rounded">Soon</span>
-               <ChevronRight size={16} />
+
+         <div className="p-4 border-b border-gray-700 hover:bg-gray-750 cursor-pointer">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                   <Bell className="text-blue-500" size={20} />
+                   <span>Notifications</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                   <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">3</span>
+                   <ChevronRight size={16} className="text-gray-500" />
+                </div>
             </div>
          </div>
 
-         <div className="p-4 flex items-center justify-between hover:bg-gray-750 cursor-pointer">
-            <div className="flex items-center space-x-3">
-               <SettingsIcon className="text-gray-400" size={20} />
-               <span>Settings</span>
+         <div className="p-4 hover:bg-gray-750 cursor-pointer">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                   <SettingsIcon className="text-gray-400" size={20} />
+                   <span>Settings</span>
+                </div>
+                <ChevronRight size={16} className="text-gray-500" />
             </div>
-            <ChevronRight size={16} className="text-gray-500" />
          </div>
-      </div>
-      
-      <div className="text-center text-xs text-gray-600 mt-8">
-         MilkyFarcaster v0.2.0 (Phase 2)
       </div>
     </div>
   );
