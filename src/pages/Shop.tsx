@@ -19,7 +19,7 @@ export function Shop() {
   
   const PRICE_SUB_ETH = "0.005"; 
   const PRICE_TRIAL_ETH = "0.0003"; 
-  const PLATFORM_WALLET = process.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}`;
+  const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}`;
 
   const handleBuy = async (item: string, price: string) => {
     if (!isConnected || !PLATFORM_WALLET) return;

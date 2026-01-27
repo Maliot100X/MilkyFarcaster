@@ -85,6 +85,30 @@ export function More() {
          <ChevronRight className="text-purple-300" />
       </div>
 
+      {/* Notifications */}
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+         <div className="flex items-center space-x-2 mb-4">
+            <Bell className="text-yellow-500" />
+            <h2 className="text-lg font-bold text-gray-100">Notifications</h2>
+         </div>
+         <div className="space-y-3">
+             <div className="flex items-start space-x-3 p-3 bg-gray-900/50 rounded-lg">
+                <div className="bg-blue-900/30 p-2 rounded-full"><Trophy size={14} className="text-blue-400" /></div>
+                <div>
+                    <p className="text-sm text-gray-200">Welcome to MilkyFarcaster Phase 2!</p>
+                    <p className="text-xs text-gray-500">Just now</p>
+                </div>
+             </div>
+             <div className="flex items-start space-x-3 p-3 bg-gray-900/50 rounded-lg">
+                <div className="bg-purple-900/30 p-2 rounded-full"><ShoppingBag size={14} className="text-purple-400" /></div>
+                <div>
+                    <p className="text-sm text-gray-200">Shop is now open! Get your boosts.</p>
+                    <p className="text-xs text-gray-500">1 hour ago</p>
+                </div>
+             </div>
+         </div>
+      </div>
+
       {/* Coin Death Counter */}
       <div className="bg-red-900/20 border border-red-900/50 rounded-xl p-4">
          <div className="flex items-center space-x-2 mb-4">

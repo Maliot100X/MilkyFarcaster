@@ -11,6 +11,7 @@ export function Burn() {
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const { context } = useFarcaster();
   const selectedToken = { symbol: 'ETH' };
+  const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x0000000000000000000000000000000000000000";
   
   const { address, isConnected } = useAccount();
   const { data: hash, error: sendError, isPending: isSending, sendTransaction } = useSendTransaction();
@@ -61,6 +62,7 @@ export function Burn() {
   const handleBurn = async () => {
     if (!isConnected || !amount) return;
     setStatus("burning");
+    console.log("Burning to DEAD. Platform Wallet:", PLATFORM_WALLET); // Log for now
     
     try {
       sendTransaction({
