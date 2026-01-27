@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import sdk from "@farcaster/miniapp-sdk";
-import { Flame, Share2, Loader2, ArrowRight, Wallet } from "lucide-react";
+import { Flame, Share2, Loader2, Wallet } from "lucide-react";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useBalance } from "wagmi";
 import { parseEther, formatEther } from "viem";
 import { useFarcaster } from "../context/FarcasterContext";
@@ -21,7 +21,7 @@ export function Burn() {
   const { data: balance } = useBalance({
     address: address,
   });
-  const formattedBalance = balance ? (Number(balance.value) / 1e18).toFixed(4) : "0.0000";
+  const formattedBalance = balance ? parseFloat(formatEther(balance.value)).toFixed(4) : "0.0000";
 
   useEffect(() => {
     if (hash) {
