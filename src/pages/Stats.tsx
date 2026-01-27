@@ -1,20 +1,36 @@
-import { Share2, Users, TrendingUp, Award } from "lucide-react";
+import { Share2, Users, TrendingUp, Award, Loader2 } from "lucide-react";
 import { useFarcaster } from "../context/FarcasterContext";
 import sdk from "@farcaster/miniapp-sdk";
+import { useQuery } from "@tanstack/react-query";
 
 export function Stats() {
   const { context } = useFarcaster();
+  const fid = context?.user.fid;
+
+  const { data: statsData, isLoading } = useQuery({
+    queryKey: ['stats', fid],
+    queryFn: async () => {
+      if (!fid) throw new Error("No FID");
+      const res = await fetch(`/api/stats?fid=${fid}`);
+      if (!res.ok) {
+         // Fallback for dev/mock if API fails (e.g. no key)
+         console.warn("API Error, using fallback");
+         return {
+           reputation: 100,
+           archetype: "Explorer",
+           followers: { total: 0, new: 0, whales: 0 },
+           user: { display_name: "Explorer", pfp_url: "" }
+         };
+      }
+      return res.json();
+    },
+    enabled: !!fid
+  });
   
-  // Mock Data
-  const stats = {
-    reputation: 850,
-    archetype: "Builder",
-    followers: {
-      total: 12500,
-      new: 124,
-      whales: 15,
-      mutuals: 850
-    }
+  const stats = statsData?.stats || {
+    reputation: 0,
+    archetype: "Loading...",
+    followers: { total: 0, new: 0, whales: 0 }
   };
 
   const handleShare = () => {
@@ -22,6 +38,15 @@ export function Stats() {
     const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`;
     sdk.actions.openUrl(url);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh]">
+        <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
+        <p>Analyzing your legend...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-6 pb-20">
@@ -54,8 +79,8 @@ export function Stats() {
                <p className="text-2xl font-bold text-white">{stats.reputation}</p>
              </div>
              <div className="bg-black/30 p-3 rounded-lg">
-               <p className="text-gray-400 text-xs uppercase">Global Rank</p>
-               <p className="text-2xl font-bold text-white">#420</p>
+               <p className="text-gray-400 text-xs uppercase">Growth</p>
+               <p className="text-2xl font-bold text-white">{stats.growth || "+0%"}</p>
              </div>
           </div>
 
@@ -65,21 +90,14 @@ export function Stats() {
                    <Users size={16} className="mr-2" />
                    <span>Followers</span>
                 </div>
-                <span className="font-bold">{stats.followers.total.toLocaleString()}</span>
+                <span className="font-bold">{statsData?.user?.follower_count?.toLocaleString() || 0}</span>
              </div>
              <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center text-green-400">
                    <TrendingUp size={16} className="mr-2" />
-                   <span>New (24h)</span>
+                   <span>Following</span>
                 </div>
-                <span className="font-bold text-green-400">+{stats.followers.new}</span>
-             </div>
-             <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center text-purple-400">
-                   <Award size={16} className="mr-2" />
-                   <span>Whales</span>
-                </div>
-                <span className="font-bold text-purple-400">{stats.followers.whales}</span>
+                <span className="font-bold text-green-400">{statsData?.user?.following_count?.toLocaleString() || 0}</span>
              </div>
           </div>
         </div>
@@ -92,26 +110,6 @@ export function Stats() {
         <Share2 size={20} />
         <span>Share Stat Card</span>
       </button>
-
-      {/* Additional Stats Grid */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-           <h3 className="text-gray-400 text-sm mb-1">Casts</h3>
-           <p className="text-2xl font-bold">1,234</p>
-        </div>
-        <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-           <h3 className="text-gray-400 text-sm mb-1">Likes Given</h3>
-           <p className="text-2xl font-bold">8.5k</p>
-        </div>
-        <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-           <h3 className="text-gray-400 text-sm mb-1">Recasts</h3>
-           <p className="text-2xl font-bold">450</p>
-        </div>
-        <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-           <h3 className="text-gray-400 text-sm mb-1">Mentions</h3>
-           <p className="text-2xl font-bold">89</p>
-        </div>
-      </div>
     </div>
   );
 }

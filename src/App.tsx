@@ -7,15 +7,17 @@ import { Burn } from "./pages/Burn";
 import { Play } from "./pages/Play";
 import { Stats } from "./pages/Stats";
 import { More } from "./pages/More";
+import { AI } from "./pages/AI";
 
 function AppContent() {
   return (
-    <div className="bg-gray-900 min-h-screen text-white pb-24">
+    <div className="bg-gray-900 min-h-screen text-white pb-24 relative">
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/burn" element={<Burn />} />
         <Route path="/play" element={<Play />} />
         <Route path="/stats" element={<Stats />} />
+        <Route path="/ai" element={<AI />} />
         <Route path="/more" element={<More />} />
       </Routes>
       <BottomNav />

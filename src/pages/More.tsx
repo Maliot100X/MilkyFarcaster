@@ -1,14 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Skull, Trophy, Bell, Settings as SettingsIcon, ChevronRight } from "lucide-react";
 
-export function More() {
-  const [coinSearch, setCoinSearch] = useState("");
-  const [deathStatus, setDeathStatus] = useState<"idle" | "dead">("idle");
+import { useFarcaster } from "../context/FarcasterContext";
 
-  const handleDeclareDead = () => {
-    if (!coinSearch) return;
-    setDeathStatus("dead");
-    setTimeout(() => setDeathStatus("idle"), 3000);
+type LeaderboardEntry = {
+  fid: number;
+  xp: number;
+};
+
+export function More() {
+  const { context } = useFarcaster();
+  const [coinSearch, setCoinSearch] = useState("");
+  const [deathStatus, setDeathStatus] = useState<"idle" | "dead" | "loading" | "error">("idle");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  useEffect(() => {
+    if (showLeaderboard) {
+      setLoadingLeaderboard(true);
+      fetch('/api/leaderboard')
+        .then(res => res.json())
+        .then(data => {
+            if (data.leaderboard) setLeaderboard(data.leaderboard);
+        })
+        .catch(console.error)
+        .finally(() => setLoadingLeaderboard(false));
+    }
+  }, [showLeaderboard]);
+
+  const handleDeclareDead = async () => {
+    if (!coinSearch || !context?.user?.fid) return;
+    setDeathStatus("loading");
+    
+    try {
+      const res = await fetch('/api/graveyard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: coinSearch, fid: context.user.fid })
+      });
+      
+      if (res.ok) {
+        setDeathStatus("dead");
+        setTimeout(() => setDeathStatus("idle"), 3000);
+      } else {
+        setDeathStatus("error");
+      }
+    } catch (e) {
+      console.error(e);
+      setDeathStatus("error");
+    }
   };
 
   return (
@@ -51,15 +92,45 @@ export function More() {
 
       {/* Menu List */}
       <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
-         <div className="p-4 flex items-center justify-between border-b border-gray-700 hover:bg-gray-750 cursor-pointer">
-            <div className="flex items-center space-x-3">
-               <Trophy className="text-yellow-500" size={20} />
-               <span>Leaderboards</span>
+         <div 
+            className="p-4 border-b border-gray-700 hover:bg-gray-750 cursor-pointer"
+            onClick={() => setShowLeaderboard(!showLeaderboard)}
+         >
+            <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                   <Trophy className="text-yellow-500" size={20} />
+                   <span>Leaderboards</span>
+                </div>
+                <ChevronRight size={16} className={`text-gray-500 transition-transform ${showLeaderboard ? 'rotate-90' : ''}`} />
             </div>
-            <div className="flex items-center space-x-2 text-gray-500">
-               <span className="text-xs bg-gray-700 px-2 py-0.5 rounded">Soon</span>
-               <ChevronRight size={16} />
-            </div>
+            
+            {showLeaderboard && (
+                <div className="mt-4 space-y-2">
+                    {loadingLeaderboard ? (
+                        <div className="text-center text-gray-500 py-2">Loading top players...</div>
+                    ) : (
+                        leaderboard.map((entry, idx) => (
+                            <div key={entry.fid} className="flex items-center justify-between bg-gray-900/50 p-2 rounded">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-6 text-center font-bold text-gray-500">
+                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="font-mono text-sm">FID: {entry.fid}</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-1 text-yellow-500 font-bold">
+                                    <span>{entry.xp}</span>
+                                    <span className="text-xs">XP</span>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                    {leaderboard.length === 0 && !loadingLeaderboard && (
+                        <div className="text-center text-gray-500 py-2">No players found yet.</div>
+                    )}
+                </div>
+            )}
          </div>
          
          <div className="p-4 flex items-center justify-between border-b border-gray-700 hover:bg-gray-750 cursor-pointer">
@@ -83,7 +154,7 @@ export function More() {
       </div>
       
       <div className="text-center text-xs text-gray-600 mt-8">
-         MilkyFarcaster v0.1.0 (Phase 1)
+         MilkyFarcaster v0.2.0 (Phase 2)
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Flame, Gamepad2, BarChart2, MoreHorizontal } from "lucide-react";
+import { Home, Flame, Gamepad2, BarChart2, MoreHorizontal, Bot } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const tabs = [
@@ -7,6 +7,7 @@ const tabs = [
   { name: "Burn", path: "/burn", icon: Flame },
   { name: "Play", path: "/play", icon: Gamepad2 },
   { name: "Stats", path: "/stats", icon: BarChart2 },
+  { name: "AI", path: "/ai", icon: Bot },
   { name: "More", path: "/more", icon: MoreHorizontal },
 ];
 

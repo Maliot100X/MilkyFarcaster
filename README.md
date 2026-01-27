@@ -1,60 +1,116 @@
-# MilkyFarcaster (Phase 1)
+# MilkyFarcaster (Phase 2)
 
-MilkyFarcaster is a Farcaster Mini App built with Vite, React, and Tailwind CSS. It is designed to be an arcade-style hub for Farcaster users.
+MilkyFarcaster is a production-ready Farcaster Mini App on Base Mainnet. It serves as an interactive arcade, utility hub, and AI assistant for Farcaster users.
 
-## Phase 1 Overview
+## Phase 2: Full Production Upgrade
 
-Phase 1 focuses on the UI and user flow, with mocked logic for blockchain transactions and backend interactions.
+Phase 2 upgrades the application from mocked demos to real on-chain interactions, persistent database storage, and AI agent integration.
 
-### Features
-- **Home**: User profile, XP, Level, and activity feed.
-- **Burn**: Simulate burning $MILKY tokens to reveal secrets and earn XP.
-- **Play**: Daily spin/loot mechanics (mocked).
-- **Stats**: View reputation, caster archetype, and follower insights.
-- **More**: Coin Death Counter, Leaderboards (soon), Notifications (soon), Settings.
+### Key Features
+- **Real Burn System**: Burn ETH or ERC-20 tokens (USDC, DEGEN, WETH) on Base to earn XP. Transactions are verified on-chain via backend with idempotency checks.
+- **Game Hub**: 
+  - **Daily Spin**: Persistent server-side cooldowns (24h) and rewards stored in Supabase.
+  - **Milky Trivia**: Interactive quiz with score tracking and XP rewards.
+- **Social Stats**: Integration with Neynar API to fetch real user followers, engagement, and calculate "Reputation".
+- **AI & Bot Agent**: 
+  - **MilkyBot**: Built-in AI helper for Farcaster/Base questions (powered by AIML API).
+  - **MoltBot Integration**: Automated task runner agent embedded in the app (powered by Groq/OpenRouter/GitHub Models).
+- **Leaderboards**: Real-time XP leaderboards powered by Supabase.
+- **Coin Death Counter**: Community-driven coin status tracker.
+- **Wallet Support**: Full support for Farcaster Custody, Coinbase Wallet, and MetaMask.
+- **File Storage**: Pinata IPFS integration for uploads.
 
 ## Tech Stack
-- **Framework**: Vite + React + TypeScript
-- **Styling**: Tailwind CSS
+- **Frontend**: Vite + React + TypeScript + Tailwind CSS
+- **Blockchain**: Wagmi + Viem (Base Mainnet)
+- **Backend**: Vercel Serverless Functions (Node.js)
+- **Database**: Supabase (Postgres)
+- **Storage**: Pinata (Images/Files)
+- **APIs**: Neynar (Stats), AIML (Chat), MoltBot (Agent)
 - **SDK**: @farcaster/miniapp-sdk
-- **Web3**: wagmi + viem
-- **State**: React Context + React Query
 
-## Getting Started
+## Configuration
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
+The project is configured to use Vercel for deployment and Supabase for the database.
 
-### Installation
+### Environment Variables
+The following environment variables are required (and have been configured in `.env.local`):
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Maliot100X/MilkyFarcaster.git
-   cd MilkyFarcaster
-   ```
+```env
+# Farcaster / Neynar
+NEYNAR_API_KEY=...
+NEYNAR_CLIENT_ID=...
+NEYNAR_SNAPCHAIN_URL=...
+NEYNAR_NOTIFICATION_WEBHOOK=...
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+# App URLs & Blockchain
+NEXT_PUBLIC_APP_URL=...
+NEXT_PUBLIC_CHAIN_ID=8453
+BASE_RPC_URL=...
 
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
+# Contracts / Burn
+NEXT_PUBLIC_BURN_CONTRACT=...
+NEXT_PUBLIC_BURN_TOKEN=...
 
-4. Open the app in your browser or Farcaster client.
-   - For local development, the app mocks the Farcaster context if not running inside a frame.
+# Backend / Database
+DATABASE_URL=...
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+# AI Assistant & MoltBot
+AIML_API_KEY_1=...
+MOLTBOT_API_KEY_1=...
+MOLTBOT_REPO=...
+
+# Storage & Tools
+PINATA_JWT=...
+NEXT_PUBLIC_ZORA_API_KEY=...
+```
+
+## Database Schema (Supabase)
+
+The app uses the following tables in Supabase:
+
+1. **`users` table**:
+   - `fid` (int8, primary key): Farcaster ID
+   - `xp` (int8): Total Experience Points
+   - `data` (jsonb): Stores game metadata (lastSpin, lastQuiz, etc.)
+   - `last_active` (timestamptz)
+
+2. **`burns` table**:
+   - `tx_hash` (text, primary key): Transaction Hash (for idempotency)
+   - `fid` (int8)
+   - `token` (text)
+   - `amount` (text)
+   - `xp_awarded` (int8)
+   - `created_at` (timestamptz)
+
+3. **`coins` table** (for Death Counter):
+   - `symbol` (text, primary key)
+   - `death_count` (int8)
+   - `status` (text)
+   - `last_declared_by` (int8)
 
 ## Deployment
 
-This project is ready for deployment on Vercel.
+1. **Build Locally**
+   ```bash
+   npm install
+   npm run build
+   ```
 
-1. Push to GitHub.
-2. Import project into Vercel.
-3. Deploy.
+2. **Push to GitHub**
+   Push the `phase-2` branch to your repository.
+
+3. **Deploy to Vercel**
+   - Connect your GitHub repository to Vercel.
+   - Vercel will automatically detect the Vite settings.
+   - **Important**: Copy all variables from `.env.local` to Vercel Project Settings.
+   - The `vercel.json` file handles SPA routing rewrites.
+
+## Compliance
+- `/.well-known/farcaster.json` is configured for Frame/Mini App discovery.
+- `sdk.actions.ready()` is called on initialization.
 
 ## License
-
 MIT
