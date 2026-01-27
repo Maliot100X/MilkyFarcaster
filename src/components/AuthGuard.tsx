@@ -11,19 +11,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 text-center">
-        <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
-        <p className="mb-6 text-gray-400">
-          This app is only available within Farcaster.
-        </p>
-        <div className="p-4 bg-gray-800 rounded-lg">
-          <p className="text-sm">Please open this Mini App from a Farcaster client like Warpcast.</p>
-        </div>
-      </div>
-    );
-  }
-
+  // For Phase 2, we allow web access even if not authenticated via Farcaster
+  // The app pages will handle "Connect Wallet" state individually.
   return <>{children}</>;
 }

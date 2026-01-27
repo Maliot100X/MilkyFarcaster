@@ -7,6 +7,7 @@ import { Burn } from "./pages/Burn";
 import { Play } from "./pages/Play";
 import { Stats } from "./pages/Stats";
 import { More } from "./pages/More";
+import { Shop } from "./pages/Shop";
 import { AI } from "./pages/AI";
 
 function AppContent() {
@@ -19,6 +20,7 @@ function AppContent() {
         <Route path="/stats" element={<Stats />} />
         <Route path="/ai" element={<AI />} />
         <Route path="/more" element={<More />} />
+        <Route path="/shop" element={<Shop />} />
       </Routes>
       <BottomNav />
     </div>

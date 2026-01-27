@@ -25,31 +25,18 @@ export function FarcasterProvider({ children }: { children: React.ReactNode }) {
         // For development in browser, we can mock if needed, but for now strict check
         const context = await sdk.context;
         
-        // MOCK for local development if not in Farcaster
-        if (!context && import.meta.env.DEV) {
-           console.log("Dev mode: Mocking Farcaster Context");
-           const mockContext: Context.MiniAppContext = {
-             user: {
-               fid: 12345,
-               username: "milky-dev",
-               displayName: "Milky Dev",
-               pfpUrl: "https://warpcast.com/avatar.png",
-             },
-             client: {
-               clientFid: 1,
-               added: true,
-             }
-           };
-           setContext(mockContext);
-           setIsAuthenticated(true);
-        } else if (context) {
+        // For production web usage (outside Farcaster), we allow null context
+        if (!context) {
+          console.log("Running in Web Mode (No Farcaster Context)");
+          // We don't set isAuthenticated to true here, letting the app handle "Connect Wallet" state
+        } else {
           setContext(context);
           setIsAuthenticated(true);
         }
         
         sdk.actions.ready();
       } catch (error) {
-        console.error("Failed to initialize Farcaster SDK:", error);
+        console.warn("Farcaster SDK init failed (likely web mode):", error);
       } finally {
         setIsLoading(false);
       }

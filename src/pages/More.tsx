@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Search, Skull, Trophy, Bell, Settings as SettingsIcon, ChevronRight } from "lucide-react";
-
+import { Search, Skull, Trophy, Bell, Settings as SettingsIcon, ChevronRight, ShoppingBag } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useFarcaster } from "../context/FarcasterContext";
 
 type LeaderboardEntry = {
@@ -10,11 +10,23 @@ type LeaderboardEntry = {
 
 export function More() {
   const { context } = useFarcaster();
+  const navigate = useNavigate();
   const [coinSearch, setCoinSearch] = useState("");
   const [deathStatus, setDeathStatus] = useState<"idle" | "dead" | "loading" | "error">("idle");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [deadCoins, setDeadCoins] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Fetch recent dead coins
+    fetch('/api/graveyard')
+      .then(res => res.json())
+      .then(data => {
+        if (data.graveyard) setDeadCoins(data.graveyard);
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (showLeaderboard) {
@@ -43,6 +55,8 @@ export function More() {
       if (res.ok) {
         setDeathStatus("dead");
         setTimeout(() => setDeathStatus("idle"), 3000);
+        // Refresh list
+        fetch('/api/graveyard').then(res => res.json()).then(d => d.graveyard && setDeadCoins(d.graveyard));
       } else {
         setDeathStatus("error");
       }
@@ -55,6 +69,21 @@ export function More() {
   return (
     <div className="p-4 space-y-6 pb-20">
       <h1 className="text-2xl font-bold">More Features</h1>
+      
+      {/* Shop Link */}
+      <div 
+        onClick={() => navigate('/shop')}
+        className="bg-gradient-to-r from-purple-900 to-blue-900 border border-purple-500/50 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:opacity-90"
+      >
+         <div className="flex items-center space-x-3">
+            <ShoppingBag className="text-purple-300" />
+            <div>
+                <h2 className="font-bold text-white">Shop & Subscriptions</h2>
+                <p className="text-xs text-purple-200">Get Pro features & Boosts</p>
+            </div>
+         </div>
+         <ChevronRight className="text-purple-300" />
+      </div>
 
       {/* Coin Death Counter */}
       <div className="bg-red-900/20 border border-red-900/50 rounded-xl p-4">
@@ -64,7 +93,7 @@ export function More() {
          </div>
          <p className="text-sm text-gray-400 mb-4">Search a coin and declare it dead to the community.</p>
          
-         <div className="flex space-x-2">
+         <div className="flex space-x-2 mb-4">
             <div className="relative flex-1">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                <input 
@@ -84,9 +113,23 @@ export function More() {
          </div>
          
          {deathStatus === "dead" && (
-             <div className="mt-4 bg-red-500/20 text-red-300 p-2 rounded text-center text-sm animate-pulse border border-red-500/50">
+             <div className="mb-4 bg-red-500/20 text-red-300 p-2 rounded text-center text-sm animate-pulse border border-red-500/50">
                  💀 {coinSearch} has been declared DEAD! 💀
              </div>
+         )}
+         
+         {/* Recent Deaths */}
+         {deadCoins.length > 0 && (
+            <div className="space-y-2">
+                <p className="text-xs text-gray-500 uppercase font-bold">Recently Deceased</p>
+                <div className="flex flex-wrap gap-2">
+                    {deadCoins.map((coin: any) => (
+                        <span key={coin.symbol} className="text-xs bg-gray-800 border border-red-900/30 text-gray-400 px-2 py-1 rounded">
+                            {coin.symbol} (x{coin.death_count})
+                        </span>
+                    ))}
+                </div>
+            </div>
          )}
       </div>
 
