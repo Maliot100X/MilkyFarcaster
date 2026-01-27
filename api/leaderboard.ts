@@ -10,11 +10,12 @@ export default async function handler(
   }
 
   try {
+    const limit = parseInt(process.env.NEXT_PUBLIC_LEADERBOARD_TOP || '10');
     const { data, error } = await supabase
       .from('users')
       .select('fid, xp, data')
       .order('xp', { ascending: false })
-      .limit(10);
+      .limit(limit);
 
     if (error) throw error;
 
