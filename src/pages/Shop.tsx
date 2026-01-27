@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useBalance } from "wagmi";
 import { parseEther, formatEther } from "viem";
 import { ShoppingBag, Zap, Clock, ShieldCheck, Loader2, Wallet } from "lucide-react";
-import { useFarcaster } from "../context/FarcasterContext";
+// import { useFarcaster } from "../context/FarcasterContext"; // Unused for now in UI only
 
 export function Shop() {
   const { address, isConnected } = useAccount();
-  const { context } = useFarcaster();
+  // const { context } = useFarcaster();
   const { data: balance } = useBalance({ address });
   
   const [buyingItem, setBuyingItem] = useState<string | null>(null);
@@ -15,12 +15,7 @@ export function Shop() {
   const { data: hash, error: sendError, isPending: isSending, sendTransaction } = useSendTransaction();
   const { isSuccess: isConfirmed, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash });
 
-  const SUBSCRIPTION_PRICE = process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE || "15"; // In USD roughly, but we charge in ETH for now? 
-  // Wait, requirement says "$15/month". On Base, we should charge ETH equivalent or USDC.
-  // For simplicity and speed in Phase 2, we'll charge a fixed ETH amount that approximates it or 0.005 ETH (~$15)
-  // Let's use 0.005 ETH for Sub and 0.0003 ETH for Trial (~$1).
-  // Ideally we use an Oracle or USDC, but sticking to native ETH is easiest for "Real Burn/Transact".
-  // Actually, let's use the env var to determine logic, but for now hardcode safe ETH values.
+  // const SUBSCRIPTION_PRICE = process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE || "15"; 
   
   const PRICE_SUB_ETH = "0.005"; 
   const PRICE_TRIAL_ETH = "0.0003"; 
@@ -50,12 +45,22 @@ export function Shop() {
     // fetch('/api/shop', { method: 'POST', body: ... })
   }
 
+  // Use variables to avoid linter errors
+  const _error = sendError;
+  const _sending = isSending;
+
   return (
     <div className="p-4 space-y-6 pb-24">
       <h1 className="text-2xl font-bold flex items-center space-x-2">
         <ShoppingBag className="text-purple-500" />
         <span>Shop & Subs</span>
       </h1>
+
+      {isConnected && balance && (
+         <div className="text-sm text-gray-400 text-right">
+            Balance: {parseFloat(formatEther(balance.value)).toFixed(4)} {balance.symbol}
+         </div>
+      )}
 
       {!isConnected && (
          <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-xl text-center">
@@ -91,11 +96,11 @@ export function Shop() {
         </ul>
 
         <button 
-            disabled={!isConnected || status === "pending" || isConfirming}
+            disabled={!isConnected || status === "pending" || isConfirming || _sending}
             onClick={() => handleBuy("subscription", PRICE_SUB_ETH)}
             className="w-full bg-white text-purple-900 font-bold py-3 rounded-lg hover:bg-gray-100 disabled:opacity-50 transition flex items-center justify-center space-x-2"
         >
-            {status === "pending" && buyingItem === "subscription" ? (
+            {(status === "pending" || isConfirming || _sending) && buyingItem === "subscription" ? (
                 <Loader2 className="animate-spin" />
             ) : (
                 <>
@@ -117,11 +122,11 @@ export function Shop() {
         </div>
         
         <button 
-            disabled={!isConnected || status === "pending" || isConfirming}
+            disabled={!isConnected || status === "pending" || isConfirming || _sending}
             onClick={() => handleBuy("trial", PRICE_TRIAL_ETH)}
             className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition flex items-center justify-center"
         >
-             {status === "pending" && buyingItem === "trial" ? (
+             {(status === "pending" || isConfirming || _sending) && buyingItem === "trial" ? (
                 <Loader2 className="animate-spin" />
             ) : (
                 <span>Buy Trial (0.0003 ETH)</span>
@@ -135,7 +140,7 @@ export function Shop() {
         </div>
       )}
       
-      {status === "error" && (
+      {(status === "error" || _error) && (
         <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-lg text-center">
             Transaction failed. Please try again.
         </div>

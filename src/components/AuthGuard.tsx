@@ -1,7 +1,7 @@
 import { useFarcaster } from "../context/FarcasterContext";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useFarcaster();
+  const { isLoading } = useFarcaster();
 
   if (isLoading) {
     return (
