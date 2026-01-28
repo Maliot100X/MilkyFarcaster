@@ -438,7 +438,14 @@ export function Burn() {
               </div>
           ) : (
               <div className="grid grid-cols-1 gap-3 max-h-[300px] overflow-y-auto pr-1">
-                  {tokens.map((token) => {
+                  {tokens
+                    .filter(token => {
+                        const search = tokenSearch.toLowerCase();
+                        return token.name.toLowerCase().includes(search) || 
+                               token.symbol.toLowerCase().includes(search) || 
+                               token.address.toLowerCase().includes(search);
+                    })
+                    .map((token) => {
                       const isSelected = selectedTokens.some(t => t.address === token.address);
                       return (
                           <button 
