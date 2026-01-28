@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import sdk from "@farcaster/miniapp-sdk";
 import { Flame, Loader2, Wallet, CheckCircle2, Repeat, Rocket, AlertTriangle, Share2, Search } from "lucide-react";
 import { useAccount, useSendTransaction } from "wagmi";
@@ -13,6 +14,7 @@ const PLATFORM_FEE_ETH = "0.0001"; // Approx $0.20
 export function Burn() {
   const { context } = useFarcaster();
   const { address, isConnected } = useAccount();
+  const [searchParams] = useSearchParams();
   
   // BURN_WALLET: Use Platform Wallet as the "Specific Wallet" for burning/collection
   const BURN_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x980E5F15E788Cb653C77781099Fb739d7A1aEEd0";
@@ -35,6 +37,12 @@ export function Burn() {
   
   // Confirmation State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  // Cast Preview State
+  const [castUrl, setCastUrl] = useState("");
+  const [previewCast, setPreviewCast] = useState<any | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
 
   // Settings
   const [slippage, setSlippage] = useState("100"); // Default 100%
@@ -48,6 +56,32 @@ export function Burn() {
       scanTokens();
     }
   }, [isConnected, address]);
+
+  // Check URL params for boostCast
+  useEffect(() => {
+    const boostCastParam = searchParams.get('boostCast');
+    if (boostCastParam) {
+        setCastUrl(boostCastParam);
+        setMode('burn_boost');
+        // Auto-trigger preview if we have a URL
+        // We need to wait a bit for state to settle or just call a helper
+        // Since handlePreview relies on castUrl state, we can't call it immediately if it was just set
+        // But we can call the API directly or use a timeout.
+        // Better: use a separate effect that watches castUrl? No, that might loop.
+        // Let's just set the state and let the user click preview, or better, 
+        // call the API logic directly here.
+        fetch('/api/boost', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'preview', url: boostCastParam })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.author) setPreviewCast(data);
+        })
+        .catch(console.error);
+    }
+  }, [searchParams]);
 
   const scanTokens = async () => {
     setIsScanning(true);
@@ -96,6 +130,30 @@ export function Burn() {
     }
   };
 
+  const handlePreview = async () => {
+    if (!castUrl) return;
+    setIsPreviewLoading(true);
+    setPreviewError("");
+    setPreviewCast(null);
+
+    try {
+        const res = await fetch('/api/boost', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'preview', url: castUrl })
+        });
+        
+        if (!res.ok) throw new Error("Cast not found");
+        
+        const data = await res.json();
+        setPreviewCast(data);
+    } catch (e: any) {
+        setPreviewError(e.message || "Failed to load preview");
+    } finally {
+        setIsPreviewLoading(false);
+    }
+  };
+
   const generateAiCast = async (customContext?: string) => {
     setAiCastText("Generating catchy cast... 🤖");
     const actionVerb = mode === 'recycle' ? "recycled" : "burned";
@@ -104,6 +162,10 @@ export function Burn() {
     
     if (mode === 'burn_boost' && selectedCoin) {
         contextStr += ` And boosted ${selectedCoin.name} ($${selectedCoin.symbol})!`;
+    }
+
+    if (previewCast) {
+        contextStr += ` Related Cast: "${previewCast.text.substring(0, 50)}..." by @${previewCast.author.username}`;
     }
     
     try {
@@ -377,22 +439,62 @@ export function Burn() {
 
       {/* Burn & Boost: Coin Selection */}
       {mode === 'burn_boost' && (
-          <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-400 uppercase">Select Coin to Boost</label>
-              <div className="grid grid-cols-3 gap-2">
-                  {SUPPORTED_COINS.map((coin) => (
-                      <button
-                          key={coin.symbol}
-                          onClick={() => setSelectedCoin(coin)}
-                          className={`p-2 rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${selectedCoin?.symbol === coin.symbol ? 'bg-orange-900/30 border-orange-500 ring-1 ring-orange-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
+          <div className="space-y-4">
+              <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">1. Select Coin to Boost</label>
+                  <div className="grid grid-cols-3 gap-2">
+                      {SUPPORTED_COINS.map((coin) => (
+                          <button
+                              key={coin.symbol}
+                              onClick={() => setSelectedCoin(coin)}
+                              className={`p-2 rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${selectedCoin?.symbol === coin.symbol ? 'bg-orange-900/30 border-orange-500 ring-1 ring-orange-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
+                          >
+                              <img src={coin.image} alt={coin.name} className="w-8 h-8 rounded-full" />
+                              <div className="text-center">
+                                  <p className="text-xs font-bold text-white">{coin.symbol}</p>
+                                  <p className="text-[10px] text-gray-400">{coin.name}</p>
+                              </div>
+                          </button>
+                      ))}
+                  </div>
+              </div>
+
+              <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">2. Attach Cast (Optional)</label>
+                  <div className="flex space-x-2">
+                      <input 
+                          type="text" 
+                          value={castUrl}
+                          onChange={(e) => setCastUrl(e.target.value)}
+                          placeholder="Paste Farcaster URL or @username" 
+                          className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                      />
+                      <button 
+                          onClick={handlePreview}
+                          disabled={!castUrl || isPreviewLoading}
+                          className="bg-blue-600 px-4 py-2 rounded-lg font-bold text-xs disabled:opacity-50 hover:bg-blue-500 transition-colors"
                       >
-                          <img src={coin.image} alt={coin.name} className="w-8 h-8 rounded-full" />
-                          <div className="text-center">
-                              <p className="text-xs font-bold text-white">{coin.symbol}</p>
-                              <p className="text-[10px] text-gray-400">{coin.name}</p>
-                          </div>
+                          {isPreviewLoading ? <Loader2 className="animate-spin" size={14} /> : "Preview"}
                       </button>
-                  ))}
+                  </div>
+                  {previewError && (
+                      <p className="text-red-400 text-xs flex items-center">
+                          <AlertTriangle size={12} className="mr-1" />
+                          {previewError}
+                      </p>
+                  )}
+                  {previewCast && (
+                      <div className="bg-gray-800 p-3 rounded-lg border border-gray-700 flex items-start space-x-3">
+                          <img src={previewCast.author.pfp_url} className="w-8 h-8 rounded-full" />
+                          <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-1">
+                                  <span className="text-xs font-bold">{previewCast.author.display_name}</span>
+                                  <span className="text-xs text-gray-400">@{previewCast.author.username}</span>
+                              </div>
+                              <p className="text-xs text-gray-300 line-clamp-2 mt-1">{previewCast.text}</p>
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
       )}

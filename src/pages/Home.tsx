@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Zap, Clock, Search, Loader2, Share2, AlertCircle } from "lucide-react";
+import { Zap, Clock, Search, Loader2, Share2 } from "lucide-react";
 import { useAccount, useSendTransaction } from "wagmi";
 import { parseEther } from "viem";
 import sdk from "@farcaster/miniapp-sdk";
@@ -20,16 +20,15 @@ type BoostedCast = {
 
 const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x980E5F15E788Cb653C77781099Fb739d7A1aEEd0";
 
+import { SUPPORTED_COINS, type Coin } from "../lib/coins";
+
 export function Home() {
   const { context } = useFarcaster();
   const [boosts, setBoosts] = useState<BoostedCast[]>([]);
   const [isLoadingBoosts, setIsLoadingBoosts] = useState(true);
   
-  // Preview State
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [previewCast, setPreviewCast] = useState<any | null>(null);
-  const [previewError, setPreviewError] = useState("");
+  // Coin Boost State
+  const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
 
   // Payment/Boost State
   const { isConnected } = useAccount();
@@ -48,15 +47,16 @@ export function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'generate_cast_text',
-          context: `User boosted a cast on MilkyFarcaster: "${contextText.substring(0, 50)}..."`
+          context: `User boosted ${contextText} on MilkyFarcaster!`
         })
       });
       const data = await res.json();
       if (data.content) setAiCastText(data.content);
     } catch (e) {
-      setAiCastText(`I just boosted a cast on @milkyfarcaster! Check out the Boost Feed! 🚀`);
+      setAiCastText(`I just boosted ${contextText} on @milkyfarcaster! Check out the Boost Feed! 🚀`);
     }
   };
+
 
   // Fetch Boosts
   useEffect(() => {
@@ -102,33 +102,8 @@ export function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  const handlePreview = async () => {
-    if (!previewUrl) return;
-    setIsPreviewLoading(true);
-    setPreviewError("");
-    setPreviewCast(null);
-    setBoostSuccess(false);
-
-    try {
-        const res = await fetch('/api/boost', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'preview', url: previewUrl })
-        });
-        
-        if (!res.ok) throw new Error("Invalid URL or Cast not found");
-        
-        const data = await res.json();
-        setPreviewCast(data);
-    } catch (e: any) {
-        setPreviewError(e.message || "Failed to load preview");
-    } finally {
-        setIsPreviewLoading(false);
-    }
-  };
-
   const handleBoost = async (type: 'paid' | 'free', duration: '10m' | '30m' = '10m') => {
-      if (!previewCast) return;
+      if (!selectedCoin) return;
       if (type === 'paid' && !isConnected) return;
       
       setIsBoosting(true);
@@ -152,7 +127,7 @@ export function Home() {
               body: JSON.stringify({
                   action: 'boost',
                   txHash: hash,
-                  cast: previewCast,
+                  coin: selectedCoin, // Send selected coin
                   duration: type === 'free' ? '10m' : duration,
                   fid: context?.user.fid || 0
               })
@@ -164,9 +139,8 @@ export function Home() {
           }
           
           setBoostSuccess(true);
-          generateAiCast(previewCast.text);
-          setPreviewCast(null);
-          setPreviewUrl("");
+          generateAiCast(`${selectedCoin.name} ($${selectedCoin.symbol})`);
+          setSelectedCoin(null);
           fetchBoosts(); // Refresh list
 
       } catch (e: any) {
@@ -250,7 +224,7 @@ export function Home() {
       <div className="bg-gradient-to-br from-blue-900 to-purple-900 rounded-xl p-6 border border-blue-500/30 mt-8 shadow-xl">
         <h2 className="text-xl font-bold mb-4 flex items-center space-x-2">
             <Search className="text-blue-300" />
-            <span>Boost Your Cast</span>
+            <span>Boost a Coin</span>
         </h2>
         
         {boostSuccess ? (
@@ -258,15 +232,15 @@ export function Home() {
                 <div className="bg-green-500/20 text-green-400 p-4 rounded-full inline-block mb-3">
                     <Zap size={32} fill="currentColor" />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">Cast Boosted!</h3>
-                <p className="text-sm text-gray-300 mb-4">Your cast is now live on the feed.</p>
+                <h3 className="text-xl font-bold text-white mb-2">Coin Boosted!</h3>
+                <p className="text-sm text-gray-300 mb-4">Your boost is now live on the feed.</p>
                 <button 
                     onClick={() => handleShareBoost(aiCastText)}
                     disabled={!aiCastText || aiCastText.includes("Generating")}
                     className="bg-white text-blue-900 font-bold px-6 py-3 rounded-xl flex items-center justify-center space-x-2 w-full hover:bg-gray-100 transition-colors disabled:opacity-50"
                 >
                     <Share2 size={18} />
-                    <span>{aiCastText.includes("Generating") ? "Generating Cast..." : "Cast Update"}</span>
+                    <span>{aiCastText.includes("Generating") ? "Generating Cast..." : "Share Update"}</span>
                 </button>
                 <button 
                     onClick={() => setBoostSuccess(false)}
@@ -278,40 +252,35 @@ export function Home() {
         ) : (
             <div className="space-y-4">
                 <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Farcaster Cast URL or Username</label>
-                    <div className="flex space-x-2">
-                        <input 
-                            type="text" 
-                            value={previewUrl}
-                            onChange={(e) => setPreviewUrl(e.target.value)}
-                            placeholder="Paste URL or username (e.g. @dwr)" 
-                            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                        />
-                        <button 
-                            onClick={handlePreview}
-                            disabled={!previewUrl || isPreviewLoading}
-                            className="bg-blue-600 px-4 py-2 rounded-lg font-bold text-sm disabled:opacity-50 hover:bg-blue-500 transition-colors"
-                        >
-                            {isPreviewLoading ? <Loader2 className="animate-spin" size={16} /> : "Preview"}
-                        </button>
+                    <label className="text-xs text-gray-400 mb-2 block uppercase font-bold">Select Coin</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {SUPPORTED_COINS.map((coin) => (
+                            <button
+                                key={coin.symbol}
+                                onClick={() => setSelectedCoin(coin)}
+                                className={`p-2 rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${selectedCoin?.symbol === coin.symbol ? 'bg-blue-900/50 border-blue-500 ring-1 ring-blue-500' : 'bg-gray-900 border-gray-700 hover:bg-gray-800'}`}
+                            >
+                                <img src={coin.image} alt={coin.name} className="w-8 h-8 rounded-full" />
+                                <div className="text-center">
+                                    <p className="text-xs font-bold text-white">{coin.symbol}</p>
+                                    <p className="text-[10px] text-gray-400">{coin.name}</p>
+                                </div>
+                            </button>
+                        ))}
                     </div>
-                    {previewError && (
-                        <p className="text-red-400 text-xs mt-2 flex items-center">
-                            <AlertCircle size={12} className="mr-1" />
-                            {previewError}
-                        </p>
-                    )}
                 </div>
 
-                {previewCast && (
+                {selectedCoin && (
                     <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 animate-in slide-in-from-top-2">
-                        <div className="flex items-center space-x-2 mb-2">
-                            <img src={previewCast.author.pfp_url} className="w-6 h-6 rounded-full" />
-                            <span className="text-sm font-bold">{previewCast.author.username}</span>
+                        <div className="flex items-center space-x-2 mb-4">
+                            <img src={selectedCoin.image} className="w-8 h-8 rounded-full" />
+                            <div>
+                                <h3 className="text-sm font-bold text-white">{selectedCoin.name}</h3>
+                                <p className="text-xs text-gray-400">${selectedCoin.symbol}</p>
+                            </div>
                         </div>
-                        <p className="text-xs text-gray-300 line-clamp-3 mb-3">{previewCast.text}</p>
                         
-                        <div className="grid grid-cols-2 gap-3 mt-4">
+                        <div className="grid grid-cols-2 gap-3">
                             {subscription?.status === 'active' && (
                                 <button 
                                     onClick={() => handleBoost('free')} 

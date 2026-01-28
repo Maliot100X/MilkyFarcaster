@@ -111,7 +111,7 @@ export default async function handler(
                     { 
                         label: "🔥 Pay & Boost", 
                         type: "navigate", 
-                        payload: `/burn` // In future, pass param ?boostCast=${encodeURIComponent(castUrl)}
+                        payload: `/burn?boostCast=${encodeURIComponent(castUrl)}` 
                     },
                     {
                         label: "🔗 View on Warpcast",

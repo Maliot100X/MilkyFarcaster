@@ -142,6 +142,20 @@ export default async function handler(
                   // Verify Transaction
                   const receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
                   if (receipt.status === 'reverted') return response.status(400).json({ error: 'Transaction reverted' });
+
+                  // Strict Check for Paid Boosts
+                  if (boostType === 'paid') {
+                      const tx = await client.getTransaction({ hash: txHash as `0x${string}` });
+                      const expectedValue = duration === '10m' ? parseEther('0.0003') : parseEther('0.001');
+                      
+                      // Allow small margin of error or exact match? Exact match is safer for strict logic.
+                      // Using >= to allow generous users (or rounding issues if any, though BigInt is precise)
+                      if (tx.value < expectedValue) return response.status(400).json({ error: 'Insufficient payment value' });
+                      
+                      if (!tx.to || tx.to.toLowerCase() !== PLATFORM_WALLET.toLowerCase()) {
+                          return response.status(400).json({ error: 'Invalid payment recipient' });
+                      }
+                  }
               }
               
               // Calculate boost time
