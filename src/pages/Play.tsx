@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Gamepad2, Gift, XCircle, Trophy, Loader2, Brain, CheckCircle, Clock } from "lucide-react";
+import { Gamepad2, Gift, XCircle, Trophy, Loader2, Brain, CheckCircle, Share2 } from "lucide-react";
 import { useFarcaster } from "../context/FarcasterContext";
+import sdk from "@farcaster/miniapp-sdk";
 
 type Reward = { type: string, amount: number } | null;
 
@@ -9,7 +10,7 @@ const QUIZ_QUESTIONS = [
     id: 1,
     question: "What Layer 2 network is this app built on?",
     options: ["Optimism", "Arbitrum", "Base", "Polygon"],
-    answer: "Base" // Hidden from user in real app ideally, but here for local matching if needed or just display
+    answer: "Base" 
   },
   {
     id: 2,
@@ -41,6 +42,7 @@ export function Play() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [quizScore, setQuizScore] = useState<{score: number, xp: number, total: number} | null>(null);
+  const [aiCastText, setAiCastText] = useState("");
   const [nextQuizTime, setNextQuizTime] = useState<number>(0);
   const [quizTimeLeft, setQuizTimeLeft] = useState("");
 
@@ -83,8 +85,27 @@ export function Play() {
       return `${hours}h ${minutes}m ${seconds}s`;
   };
 
+  const generateAiCast = async (context: string) => {
+    setAiCastText("Generating catchy cast... 🤖");
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_cast_text',
+          context
+        })
+      });
+      const data = await res.json();
+      if (data.content) setAiCastText(data.content);
+    } catch (e) {
+      console.error(e);
+      setAiCastText(`I just played on MilkyFarcaster! ${context} @milkyfarcaster`);
+    }
+  };
+
   const spin = async () => {
-    if (!canSpin || !context?.user.fid) return;
+    if (!canSpin || isSpinning) return;
     setIsSpinning(true);
     setReward(null);
     
@@ -92,9 +113,9 @@ export function Play() {
       const res = await fetch('/api/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fid: context.user.fid, game: 'spin' })
+        body: JSON.stringify({ fid: context?.user.fid, game: 'spin' })
       });
-
+      
       const data = await res.json();
 
       if (res.status === 429) {
@@ -112,6 +133,10 @@ export function Play() {
         setNextSpinTime(data.nextSpin);
         setCanSpin(false);
         setIsSpinning(false);
+        
+        if (data.result.type !== "nothing") {
+             generateAiCast(`I won ${data.result.amount} ${data.result.type === 'xp' ? 'XP' : '$MILKY'} on the Daily Spin! 🎰`);
+        }
       }, 2000);
 
     } catch (e) {
@@ -165,6 +190,8 @@ export function Play() {
         });
         setNextQuizTime(data.nextPlay);
         setQuizStatus('results');
+        
+        generateAiCast(`I scored ${data.score}/${data.totalQuestions} on the Milky Trivia Quiz! 🧠`);
 
     } catch (e) {
         console.error(e);
@@ -172,8 +199,13 @@ export function Play() {
     }
   };
 
+  const handleShare = (text: string) => {
+      const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=https://milky-farcaster.vercel.app/`;
+      sdk.actions.openUrl(url);
+  };
+
   return (
-    <div className="p-4 flex flex-col h-full space-y-6">
+    <div className="p-4 flex flex-col h-full space-y-6 pb-24">
       <div className="flex justify-center space-x-4 bg-gray-800 p-1 rounded-xl mx-auto">
         <button 
           onClick={() => setActiveTab('spin')}
@@ -212,13 +244,24 @@ export function Play() {
           </div>
 
           {reward && !isSpinning && (
-              <div className="animate-in zoom-in fade-in duration-300">
+              <div className="animate-in zoom-in fade-in duration-300 w-full max-w-xs">
                   <h2 className="text-2xl font-bold mb-1">
                       {reward.type === "xp" && `You won ${reward.amount} XP!`}
                       {reward.type === "token" && `You won ${reward.amount} $MILKY!`}
                       {reward.type === "nothing" && "Better luck next time!"}
                   </h2>
-                  <p className="text-sm text-gray-400">Come back tomorrow</p>
+                  <p className="text-sm text-gray-400 mb-4">Come back tomorrow</p>
+                  
+                  {reward.type !== "nothing" && (
+                      <button 
+                        onClick={() => handleShare(aiCastText)}
+                        disabled={!aiCastText || aiCastText.includes("Generating")}
+                        className="w-full bg-white text-purple-900 font-bold py-3 rounded-xl flex items-center justify-center space-x-2 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                      >
+                          <Share2 size={18} />
+                          <span>{aiCastText.includes("Generating") ? "Generating Cast..." : "Cast Win"}</span>
+                      </button>
+                  )}
               </div>
           )}
 
@@ -229,13 +272,15 @@ export function Play() {
             </div>
           )}
 
-          <button 
-            onClick={spin}
-            disabled={!canSpin || isSpinning}
-            className="w-full max-w-xs bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95"
-          >
-            {isSpinning ? "Spinning..." : "SPIN NOW"}
-          </button>
+          {!reward && (
+            <button 
+                onClick={spin}
+                disabled={!canSpin || isSpinning}
+                className="w-full max-w-xs bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95"
+            >
+                {isSpinning ? "Spinning..." : "SPIN NOW"}
+            </button>
+          )}
         </div>
       )}
 
@@ -251,12 +296,19 @@ export function Play() {
                   <h2 className="text-2xl font-bold mb-2">Milky Trivia</h2>
                   <p className="text-gray-400">Answer 3 questions to earn XP.</p>
                 </div>
-                <button 
-                  onClick={startQuiz}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95"
-                >
-                  START QUIZ
-                </button>
+                {quizTimeLeft ? (
+                    <div className="bg-gray-800 px-6 py-3 rounded-xl border border-gray-700">
+                        <p className="text-gray-400 text-sm mb-1">Next Quiz In</p>
+                        <p className="text-xl font-mono font-bold text-white">{quizTimeLeft}</p>
+                    </div>
+                ) : (
+                    <button 
+                    onClick={startQuiz}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95"
+                    >
+                    START QUIZ
+                    </button>
+                )}
              </>
            )}
 
@@ -299,32 +351,40 @@ export function Play() {
                    <p className="text-gray-400 mb-6">
                        You earned <span className="text-green-400 font-bold">+{quizScore.xp} XP</span>
                    </p>
+                   
                    <button 
-                      onClick={() => setQuizStatus('intro')} // Will likely hit cooldown if tried again immediately
-                      className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl"
+                        onClick={() => handleShare(aiCastText)}
+                        disabled={!aiCastText || aiCastText.includes("Generating")}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex items-center justify-center space-x-2 disabled:opacity-50"
                    >
-                      Back to Menu
+                        <Share2 size={18} />
+                        <span>{aiCastText.includes("Generating") ? "Generating Cast..." : "Cast Score"}</span>
+                   </button>
+                   
+                   <button 
+                        onClick={() => setQuizStatus('intro')}
+                        className="mt-4 text-sm text-gray-500 hover:text-gray-300"
+                   >
+                        Back to Menu
                    </button>
                </div>
            )}
-
+           
            {quizStatus === 'cooldown' && (
-               <div className="text-center">
-                   <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-6">
-                       <Clock size={48} className="text-gray-500 mx-auto mb-4" />
-                       <h3 className="text-xl font-bold mb-2">Come back later</h3>
-                       <p className="text-gray-400 mb-4">You've already played today.</p>
-                       <div className="bg-black/30 p-3 rounded-lg font-mono text-xl">
-                           {quizTimeLeft}
-                       </div>
-                   </div>
-                   <button 
-                      onClick={() => setActiveTab('spin')}
-                      className="text-blue-400 hover:underline"
-                   >
-                      Go to Spin
-                   </button>
-               </div>
+                <div className="text-center">
+                    <h2 className="text-xl font-bold mb-2">Cooldown Active</h2>
+                    <p className="text-gray-400 mb-4">You've already played today.</p>
+                    <div className="bg-gray-800 px-6 py-3 rounded-xl border border-gray-700 inline-block">
+                        <p className="text-gray-400 text-sm mb-1">Next Quiz In</p>
+                        <p className="text-xl font-mono font-bold text-white">{quizTimeLeft}</p>
+                    </div>
+                    <button 
+                        onClick={() => setQuizStatus('intro')}
+                        className="block w-full mt-6 text-blue-400 font-bold"
+                    >
+                        Back
+                    </button>
+                </div>
            )}
         </div>
       )}

@@ -9,6 +9,7 @@ import { Stats } from "./pages/Stats";
 import { More } from "./pages/More";
 import { Shop } from "./pages/Shop";
 import { AI } from "./pages/AI";
+import { Profile } from "./pages/Profile";
 
 function AppContent() {
   return (
@@ -21,6 +22,7 @@ function AppContent() {
         <Route path="/ai" element={<AI />} />
         <Route path="/more" element={<More />} />
         <Route path="/shop" element={<Shop />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
       <BottomNav />
     </div>

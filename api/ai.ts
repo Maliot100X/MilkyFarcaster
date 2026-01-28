@@ -14,12 +14,30 @@ export default async function handler(
     return response.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { messages } = request.body;
+  const { messages, action, context } = request.body;
 
   if (KEYS.length === 0) {
     return response.status(503).json({ 
       content: "AI service is currently unavailable (Configuration Error)." 
     });
+  }
+
+  let systemPrompt = "You are MilkyBot, a helpful assistant for MilkyFarcaster. You are knowledgeable about Farcaster, Base, and crypto.";
+  let userMessages = messages;
+
+  if (action === 'generate_cast_text') {
+    systemPrompt = `You are a social media hype bot for MilkyFarcaster. 
+    Your goal is to write a catchy, fun, and exciting Farcaster cast about a user's recent action.
+    
+    RULES:
+    - Keep it under 280 characters.
+    - Use emojis.
+    - Be enthusiastic but not cringe.
+    - NEVER say "Here is a cast" or "I can't post". Just output the text.
+    - Include the tag @milkyfarcaster.
+    - The context of the action is: ${context}
+    `;
+    userMessages = [{ role: "user", content: "Write a cast about this." }];
   }
 
   let lastError = null;
@@ -33,10 +51,10 @@ export default async function handler(
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o', // AIML supports various models, defaulting to a strong one
+          model: 'gpt-4o',
           messages: [
-            { role: "system", content: "You are MilkyBot, a helpful assistant for MilkyFarcaster. You are knowledgeable about Farcaster, Base, and crypto." },
-            ...messages
+            { role: "system", content: systemPrompt },
+            ...userMessages
           ],
           max_tokens: 500
         })

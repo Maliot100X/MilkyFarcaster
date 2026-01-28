@@ -40,9 +40,25 @@ export function Shop() {
 
   // Sync purchase with backend when confirmed
   if (isConfirmed && status !== "success") {
+    // Only trigger once
     setStatus("success");
-    // TODO: Call backend to record subscription in Supabase
-    // fetch('/api/shop', { method: 'POST', body: ... })
+    
+    // Call backend
+    fetch('/api/shop', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            fid: context?.user.fid,
+            txHash: hash,
+            plan: buyingItem
+        })
+    }).then(res => res.json())
+      .then(data => {
+          if(data.success) {
+              alert(`Successfully subscribed to ${buyingItem}!`);
+          }
+      })
+      .catch(console.error);
   }
 
   // Use variables to avoid linter errors
