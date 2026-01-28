@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useBalance } from "wagmi";
 import { parseEther, formatEther } from "viem";
-import { ShoppingBag, Zap, Clock, ShieldCheck, Loader2, Wallet } from "lucide-react";
+import { ShoppingBag, Zap, Clock, ShieldCheck, Loader2, Wallet, CheckCircle2 } from "lucide-react";
 import { useFarcaster } from "../context/FarcasterContext";
 
 export function Shop() {
@@ -15,8 +15,6 @@ export function Shop() {
   const { data: hash, error: sendError, isPending: isSending, sendTransaction } = useSendTransaction();
   const { isSuccess: isConfirmed, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash });
 
-  // const SUBSCRIPTION_PRICE = process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE || "15"; 
-  
   const PRICE_SUB_ETH = "0.005"; 
   const PRICE_TRIAL_ETH = "0.0003"; 
   const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x980E5F15E788Cb653C77781099Fb739d7A1aEEd0";
@@ -67,13 +65,7 @@ export function Shop() {
             txHash: hash,
             plan: buyingItem
         })
-    }).then(res => res.json())
-      .then(data => {
-          if(data.success) {
-              alert(`Successfully subscribed to ${buyingItem}!`);
-          }
-      })
-      .catch(console.error);
+    }).catch(console.error);
   }
 
   // Use variables to avoid linter errors
@@ -167,9 +159,23 @@ export function Shop() {
         </button>
       </div>
 
-      {status === "success" && (
-        <div className="bg-green-500/20 border border-green-500/50 text-green-200 p-4 rounded-lg text-center">
-            Purchase Successful! Features unlocked.
+      {/* Success Overlay */}
+      {status === 'success' && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-6 text-center">
+            <CheckCircle2 size={64} className="text-green-500 mb-6" />
+            <h2 className="text-3xl font-bold text-white mb-2">Purchase Successful!</h2>
+            <p className="text-gray-400 mb-8">
+                You have successfully subscribed to {buyingItem}. Features are now unlocked!
+            </p>
+            
+            <div className="w-full max-w-sm space-y-3">
+                <button 
+                    onClick={() => setStatus('idle')}
+                    className="w-full py-4 bg-gray-800 rounded-xl font-bold text-gray-400"
+                >
+                    Close
+                </button>
+            </div>
         </div>
       )}
       

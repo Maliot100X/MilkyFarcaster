@@ -24,7 +24,7 @@ export default async function handler(
     return response.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { txHash, fid, action = 'burn', tokenAddress } = request.body;
+  const { txHash, fid, action = 'burn', tokenAddress, usdValue } = request.body;
 
   if (!txHash || !fid) {
     return response.status(400).json({ error: 'Missing txHash or fid' });
@@ -89,21 +89,16 @@ export default async function handler(
 
     if (isValid) {
        // 2. Record in Supabase
-       // We use the 'burns' table for both for now, but add a 'type' column if we could (or just reuse structure)
-       // Since 'burns' table might not have 'type', we'll just store it.
-       // Ideally we should add 'type' to the schema, but I can't migrate DB easily here.
-       // I will store "SWAP" in the 'status' field if it exists, or just treat it as a burn record for XP purposes.
-       
        await supabase.from('burns').insert({
           tx_hash: txHash,
           fid: fid,
           token: token,
-          amount: amount.toString(), // For swaps this might be 0 if we didn't decode logs, but that's fine for MVP
+          amount: amount.toString(),
           xp_awarded: xpAward,
           created_at: new Date().toISOString()
        });
 
-       // 3. Update User XP
+       // 3. Update User XP and Stats
        const { data: user } = await supabase.from('users').select('xp, data').eq('fid', fid).single();
        
        // Apply Subscription Multiplier
@@ -114,11 +109,26 @@ export default async function handler(
 
        const currentXp = user?.xp || 0;
        const newXp = currentXp + xpAward;
+       
+       // Update Stats
+       const currentStats = user?.data?.stats || {};
+       const usdValFloat = parseFloat(usdValue || "0");
+       
+       if (action === 'burn') {
+           currentStats.burned_usd = (currentStats.burned_usd || 0) + usdValFloat;
+           currentStats.burn_count = (currentStats.burn_count || 0) + 1;
+       } else if (action === 'swap') {
+           currentStats.swapped_usd = (currentStats.swapped_usd || 0) + usdValFloat;
+       }
 
        await supabase.from('users').upsert({
            fid: fid,
            xp: newXp,
-           last_active: new Date().toISOString()
+           last_active: new Date().toISOString(),
+           data: {
+               ...user?.data,
+               stats: currentStats
+           }
        });
        
        return response.status(200).json({ 

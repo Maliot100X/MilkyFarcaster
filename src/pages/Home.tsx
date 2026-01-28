@@ -191,7 +191,7 @@ export function Home() {
             <span>Boost Feed</span>
          </h1>
          <div className="bg-yellow-900/30 border border-yellow-500/50 px-3 py-1 rounded-full text-xs text-yellow-200 animate-pulse">
-            Live Promoted Casts
+            Live Boosts
          </div>
       </div>
 
@@ -204,29 +204,45 @@ export function Home() {
         ) : boosts.length === 0 ? (
             <div className="text-center py-10 text-gray-500 bg-gray-900/50 rounded-xl border border-dashed border-gray-700">
                 <p>No active boosts right now.</p>
-                <p className="text-sm mt-1">Be the first to promote your cast!</p>
+                <p className="text-sm mt-1">Be the first to promote your cast or coin!</p>
             </div>
         ) : (
-            boosts.map((boost) => (
-                <div key={boost.id} className="bg-gray-800 border border-yellow-500/30 rounded-xl p-4 shadow-lg shadow-yellow-900/10 relative overflow-hidden transition-all hover:border-yellow-500/60">
-                    <div className="absolute top-0 right-0 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-bl-lg flex items-center space-x-1 z-10">
+            boosts.map((boost) => {
+                const isCoin = boost.cast_url.startsWith('coin:');
+                return (
+                <div key={boost.id} className={`bg-gray-800 border ${isCoin ? 'border-orange-500/50' : 'border-yellow-500/30'} rounded-xl p-4 shadow-lg relative overflow-hidden transition-all hover:border-opacity-100`}>
+                    <div className={`absolute top-0 right-0 ${isCoin ? 'bg-orange-600' : 'bg-yellow-500'} text-black text-xs font-bold px-2 py-1 rounded-bl-lg flex items-center space-x-1 z-10`}>
                         <Clock size={10} />
                         <Countdown target={boost.boosted_until} />
                     </div>
                     
-                    <div className="flex items-start space-x-3 mt-2">
-                        <img src={boost.author_data.pfp_url} alt={boost.author_data.username} className="w-10 h-10 rounded-full border border-gray-600" />
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-1">
-                                <p className="font-bold text-sm truncate">{boost.author_data.display_name}</p>
-                                <p className="text-gray-400 font-normal text-xs truncate">@{boost.author_data.username}</p>
-                            </div>
-                            <p className="text-gray-200 mt-1 text-sm break-words line-clamp-3">{boost.text}</p>
-                            {boost.image && <img src={boost.image} alt="Cast media" className="mt-2 rounded-lg w-full object-cover max-h-48" />}
+                    {isCoin ? (
+                        <div className="flex items-center space-x-4 mt-2">
+                             <img src={boost.author_data.pfp_url} className="w-14 h-14 rounded-full border-2 border-orange-500 p-1" />
+                             <div>
+                                 <h3 className="font-bold text-xl text-white">{boost.author_data.display_name}</h3>
+                                 <p className="text-sm text-gray-400 font-mono">${boost.author_data.username}</p>
+                                 <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-900/50 text-orange-200 border border-orange-500/30">
+                                     🔥 TRENDING COIN
+                                 </div>
+                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="flex items-start space-x-3 mt-2">
+                            <img src={boost.author_data.pfp_url} alt={boost.author_data.username} className="w-10 h-10 rounded-full border border-gray-600" />
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-1">
+                                    <p className="font-bold text-sm truncate">{boost.author_data.display_name}</p>
+                                    <p className="text-gray-400 font-normal text-xs truncate">@{boost.author_data.username}</p>
+                                </div>
+                                <p className="text-gray-200 mt-1 text-sm break-words line-clamp-3">{boost.text}</p>
+                                {boost.image && <img src={boost.image} alt="Cast media" className="mt-2 rounded-lg w-full object-cover max-h-48" />}
+                            </div>
+                        </div>
+                    )}
                 </div>
-            ))
+                );
+            })
         )}
       </div>
 

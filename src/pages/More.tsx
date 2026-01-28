@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Skull, Trophy, Bell, Settings as SettingsIcon, ChevronRight, ShoppingBag } from "lucide-react";
+import { Search, Skull, Trophy, Bell, ChevronRight, ShoppingBag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useFarcaster } from "../context/FarcasterContext";
 
@@ -64,17 +64,6 @@ export function More() {
       console.error(e);
       setDeathStatus("error");
     }
-  };
-
-  const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState({
-    notifications: true,
-    sound: true,
-    haptics: true
-  });
-
-  const toggleSetting = (key: keyof typeof settings) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -216,51 +205,6 @@ export function More() {
                    <ChevronRight size={16} className="text-gray-500" />
                 </div>
             </div>
-         </div>
-
-         <div className="p-4 hover:bg-gray-750 cursor-pointer" onClick={() => setShowSettings(!showSettings)}>
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                   <SettingsIcon className="text-gray-400" size={20} />
-                   <span>Settings</span>
-                </div>
-                <ChevronRight size={16} className={`text-gray-500 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
-            </div>
-            
-            {showSettings && (
-                <div className="mt-4 space-y-3 p-2 bg-gray-900/50 rounded-lg">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-300">Push Notifications</span>
-                        <div 
-                            onClick={(e) => { e.stopPropagation(); toggleSetting('notifications'); }}
-                            className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${settings.notifications ? 'bg-green-500' : 'bg-gray-600'}`}
-                        >
-                            <div className={`w-4 h-4 rounded-full bg-white transition-transform ${settings.notifications ? 'translate-x-4' : ''}`} />
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-300">Sound Effects</span>
-                        <div 
-                            onClick={(e) => { e.stopPropagation(); toggleSetting('sound'); }}
-                            className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${settings.sound ? 'bg-green-500' : 'bg-gray-600'}`}
-                        >
-                            <div className={`w-4 h-4 rounded-full bg-white transition-transform ${settings.sound ? 'translate-x-4' : ''}`} />
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-300">Haptics</span>
-                        <div 
-                            onClick={(e) => { e.stopPropagation(); toggleSetting('haptics'); }}
-                            className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${settings.haptics ? 'bg-green-500' : 'bg-gray-600'}`}
-                        >
-                            <div className={`w-4 h-4 rounded-full bg-white transition-transform ${settings.haptics ? 'translate-x-4' : ''}`} />
-                        </div>
-                    </div>
-                    <div className="pt-2 border-t border-gray-700">
-                        <p className="text-xs text-gray-500 text-center">Version 2.0.0 (Base Mainnet)</p>
-                    </div>
-                </div>
-            )}
          </div>
       </div>
     </div>

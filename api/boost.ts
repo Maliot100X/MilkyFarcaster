@@ -85,8 +85,8 @@ export default async function handler(
 
       // 2. Boost Cast (Verify Payment + Store)
       if (action === 'boost' || action === 'burn_boost') {
-          const { txHash, cast, duration, fid, tokenValueUsd } = request.body;
-          if (!txHash || !cast || !fid) {
+          const { txHash, cast, coin, duration, fid, tokenValueUsd } = request.body;
+          if (!txHash || (!cast && !coin) || !fid) {
               return response.status(400).json({ error: 'Missing required fields' });
           }
 
@@ -148,16 +148,37 @@ export default async function handler(
               const boostedUntil = Date.now() + durationMs;
 
               // Store in Supabase
-              const { error } = await supabase.from('boosts').insert({
+              // If coin is present, store as coin boost
+              let insertData: any = {
                   fid,
-                  cast_url: cast.hash || cast.url, // store hash or url
-                  author_data: cast.author,
-                  text: cast.text,
-                  image: cast.embeds?.[0]?.url || null,
                   boosted_until: boostedUntil,
                   tx_hash: txHash,
                   created_at: new Date().toISOString()
-              });
+              };
+
+              if (coin) {
+                  insertData = {
+                      ...insertData,
+                      cast_url: `coin:${coin.symbol}`,
+                      author_data: {
+                          username: coin.symbol,
+                          display_name: coin.name,
+                          pfp_url: coin.image
+                      },
+                      text: `Boosted ${coin.name} ($${coin.symbol})!`,
+                      image: coin.image
+                  };
+              } else {
+                  insertData = {
+                      ...insertData,
+                      cast_url: cast.hash || cast.url,
+                      author_data: cast.author,
+                      text: cast.text,
+                      image: cast.embeds?.[0]?.url || null,
+                  };
+              }
+
+              const { error } = await supabase.from('boosts').insert(insertData);
 
               if (error) return response.status(500).json({ error: error.message });
 

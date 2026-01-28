@@ -1,14 +1,24 @@
 import { useState, useRef, useEffect } from "react";
 import { Bot, Send, Sparkles, Zap } from "lucide-react";
 import { useFarcaster } from "../context/FarcasterContext";
+import { useNavigate } from "react-router-dom";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
+  actions?: Action[];
+};
+
+type Action = {
+  label: string;
+  type: "navigate" | "link" | "preview_cast";
+  payload: string;
+  data?: any;
 };
 
 export function AI() {
   const { context } = useFarcaster();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: `Hi ${context?.user?.displayName || 'there'}! I'm MilkyBot. I can help you with Farcaster questions, or you can ask me to run MoltBot tasks.` }
   ]);
@@ -20,6 +30,18 @@ export function AI() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleAction = (action: Action) => {
+    if (action.type === 'navigate') {
+      navigate(action.payload);
+    } else if (action.type === 'link') {
+      window.open(action.payload, '_blank');
+    } else if (action.type === 'preview_cast') {
+      // In a real app, this would open a modal or navigate to a preview state
+      // For now, let's navigate to home with a query param or just show a toast
+      navigate('/home'); 
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -115,6 +137,19 @@ export function AI() {
               }`}
             >
               <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+              {msg.actions && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                      {msg.actions.map((action, i) => (
+                          <button
+                            key={i}
+                            onClick={() => handleAction(action)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1 rounded-full transition-colors"
+                          >
+                              {action.label}
+                          </button>
+                      ))}
+                  </div>
+              )}
             </div>
           </div>
         ))}

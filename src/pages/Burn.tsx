@@ -6,6 +6,7 @@ import { parseEther, encodeFunctionData } from "viem";
 import { useFarcaster } from "../context/FarcasterContext";
 import { fetchTokenBalances, type TokenBalance } from "../lib/scanner";
 import { ERC20_ABI, AERODROME_ROUTER_ABI, AERODROME_ROUTER_ADDRESS, WETH_ADDRESS, UNISWAP_ROUTER_ABI, UNISWAP_ROUTER_ADDRESS } from "../lib/abis";
+import { SUPPORTED_COINS, type Coin } from "../lib/coins";
 
 const PLATFORM_FEE_ETH = "0.0001"; // Approx $0.20
 
@@ -29,10 +30,8 @@ export function Burn() {
   const [errorMessage, setErrorMessage] = useState("");
   const [aiCastText, setAiCastText] = useState("");
   
-  // Boost State
-  const [boostUrl, setBoostUrl] = useState("");
-  const [boostPreview, setBoostPreview] = useState<any>(null);
-  const [isVerifyingCast, setIsVerifyingCast] = useState(false);
+  // Boost State (Coin Selection)
+  const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   
   // Confirmation State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -79,37 +78,14 @@ export function Burn() {
     }
   };
 
-  const verifyBoostCast = async () => {
-    if (!boostUrl) return;
-    setIsVerifyingCast(true);
-    setBoostPreview(null);
-    try {
-        const res = await fetch('/api/boost', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'preview', url: boostUrl })
-        });
-        const data = await res.json();
-        if (res.ok) {
-            setBoostPreview(data);
-        } else {
-            setErrorMessage("Invalid Farcaster URL or Cast not found");
-        }
-    } catch (e) {
-        setErrorMessage("Failed to verify cast");
-    } finally {
-        setIsVerifyingCast(false);
-    }
-  };
-
   const generateAiCast = async (customContext?: string) => {
     setAiCastText("Generating catchy cast... 🤖");
     const actionVerb = mode === 'recycle' ? "recycled" : "burned";
     const tokenNames = selectedTokens.length > 3 ? `${selectedTokens.length} tokens` : selectedTokens.map(t => t.symbol).join(", ");
     let contextStr = customContext || `User just ${actionVerb} ${tokenNames} on MilkyFarcaster.`;
     
-    if (mode === 'burn_boost' && boostPreview) {
-        contextStr += ` And boosted a cast by @${boostPreview.author.username}!`;
+    if (mode === 'burn_boost' && selectedCoin) {
+        contextStr += ` And boosted ${selectedCoin.name} ($${selectedCoin.symbol})!`;
     }
     
     try {
@@ -130,8 +106,8 @@ export function Burn() {
 
   const initiateAction = () => {
     if (!isConnected || selectedTokens.length === 0) return;
-    if (mode === 'burn_boost' && !boostPreview) {
-        setErrorMessage("Please verify a cast to boost first!");
+    if (mode === 'burn_boost' && !selectedCoin) {
+        setErrorMessage("Please select a coin to boost!");
         return;
     }
     setShowConfirmModal(true);
@@ -239,7 +215,9 @@ export function Burn() {
       setStatus("action_confirming");
       
       const lastToken = selectedTokens[selectedTokens.length - 1];
-      setTimeout(() => verifyTransaction(lastHash, mode, lastToken?.address), 5000);
+      const totalUsdValue = selectedTokens.reduce((acc, t) => acc + (t.usdValue || 0) * parseFloat(t.balance), 0);
+      
+      setTimeout(() => verifyTransaction(lastHash, mode, lastToken?.address, totalUsdValue), 5000);
 
     } catch (e: any) {
       console.error(e);
@@ -248,7 +226,7 @@ export function Burn() {
     }
   };
 
-  const verifyTransaction = async (hash: string, currentMode: string, tokenAddress?: string) => {
+  const verifyTransaction = async (hash: string, currentMode: string, tokenAddress?: string, usdValue: number = 0) => {
     setStatus("verifying");
     try {
         const actionType = currentMode === 'recycle' ? 'swap' : 'burn';
@@ -260,7 +238,8 @@ export function Burn() {
                 txHash: hash, 
                 fid: context?.user.fid || 0,
                 action: actionType,
-                tokenAddress: tokenAddress || selectedTokens[0]?.address
+                tokenAddress: tokenAddress || selectedTokens[0]?.address,
+                usdValue: usdValue.toString()
             })
         });
         
@@ -268,17 +247,16 @@ export function Burn() {
         
         if (data.success) {
             // If Burn + Boost, now trigger the boost
-            if (currentMode === 'burn_boost' && boostPreview) {
-                 const totalValue = selectedTokens.reduce((acc, t) => acc + (t.usdValue || 0) * parseFloat(t.balance), 0);
+            if (currentMode === 'burn_boost' && selectedCoin) {
                  await fetch('/api/boost', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         action: 'burn_boost',
                         txHash: hash,
-                        cast: boostPreview,
+                        coin: selectedCoin,
                         fid: context?.user.fid || 0,
-                        tokenValueUsd: totalValue.toString()
+                        tokenValueUsd: usdValue.toString()
                     })
                 });
             }
@@ -287,7 +265,7 @@ export function Burn() {
             generateAiCast();
             scanTokens();
         } else {
-            setTimeout(() => verifyTransaction(hash, currentMode, tokenAddress), 3000);
+            setTimeout(() => verifyTransaction(hash, currentMode, tokenAddress, usdValue), 3000);
         }
     } catch (e) {
         console.error(e);
@@ -379,35 +357,25 @@ export function Burn() {
       </div>
 
 
-      {/* Burn & Boost: Cast Selection */}
+      {/* Burn & Boost: Coin Selection */}
       {mode === 'burn_boost' && (
           <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-400 uppercase">Cast to Boost</label>
-              <div className="flex space-x-2">
-                  <input 
-                    type="text" 
-                    placeholder="Paste Farcaster URL or handle" 
-                    value={boostUrl}
-                    onChange={(e) => setBoostUrl(e.target.value)}
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-                  />
-                  <button 
-                    onClick={verifyBoostCast}
-                    disabled={isVerifyingCast || !boostUrl}
-                    className="bg-orange-600 px-4 py-2 rounded-lg font-bold text-white text-sm disabled:opacity-50"
-                  >
-                    {isVerifyingCast ? <Loader2 size={16} className="animate-spin" /> : "Verify"}
-                  </button>
+              <label className="text-xs font-bold text-gray-400 uppercase">Select Coin to Boost</label>
+              <div className="grid grid-cols-3 gap-2">
+                  {SUPPORTED_COINS.map((coin) => (
+                      <button
+                          key={coin.symbol}
+                          onClick={() => setSelectedCoin(coin)}
+                          className={`p-2 rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${selectedCoin?.symbol === coin.symbol ? 'bg-orange-900/30 border-orange-500 ring-1 ring-orange-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
+                      >
+                          <img src={coin.image} alt={coin.name} className="w-8 h-8 rounded-full" />
+                          <div className="text-center">
+                              <p className="text-xs font-bold text-white">{coin.symbol}</p>
+                              <p className="text-[10px] text-gray-400">{coin.name}</p>
+                          </div>
+                      </button>
+                  ))}
               </div>
-              {boostPreview && (
-                  <div className="bg-gray-800 p-3 rounded-lg flex items-start space-x-3 border border-orange-500/50">
-                      <img src={boostPreview.author.pfp_url} className="w-8 h-8 rounded-full" />
-                      <div>
-                          <p className="text-sm font-bold text-white">{boostPreview.author.username}</p>
-                          <p className="text-xs text-gray-400 line-clamp-2">{boostPreview.text}</p>
-                      </div>
-                  </div>
-              )}
           </div>
       )}
 
@@ -478,7 +446,7 @@ export function Burn() {
           <div className="fixed bottom-20 left-4 right-4 z-20">
             <button
                 onClick={initiateAction}
-                disabled={mode === 'burn_boost' && !boostPreview}
+                disabled={mode === 'burn_boost' && !selectedCoin}
                 className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'recycle' ? 'bg-green-600' : mode === 'burn_boost' ? 'bg-orange-600' : 'bg-red-600'}`}
             >
                 {mode === 'recycle' && <Repeat />}
@@ -510,10 +478,13 @@ export function Burn() {
                         <span className="text-gray-400">Platform Fee</span>
                         <span className="font-bold text-white">{PLATFORM_FEE_ETH} ETH</span>
                     </div>
-                    {mode === 'burn_boost' && boostPreview && (
-                        <div className="bg-orange-900/20 p-2 rounded border border-orange-500/30">
-                            <p className="text-xs text-orange-400 font-bold mb-1">Boosting Cast:</p>
-                            <p className="text-xs text-gray-300 line-clamp-1">{boostPreview.text}</p>
+                    {mode === 'burn_boost' && selectedCoin && (
+                        <div className="bg-orange-900/20 p-2 rounded border border-orange-500/30 flex items-center space-x-2">
+                            <img src={selectedCoin.image} className="w-6 h-6 rounded-full" />
+                            <div>
+                                <p className="text-xs text-orange-400 font-bold">Boosting Coin:</p>
+                                <p className="text-sm text-white font-bold">{selectedCoin.name} ({selectedCoin.symbol})</p>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -557,7 +528,9 @@ export function Burn() {
             <CheckCircle2 size={64} className="text-green-500 mb-6" />
             <h2 className="text-3xl font-bold text-white mb-2">Success!</h2>
             <p className="text-gray-400 mb-8">
-                {mode === 'burn_boost' ? "Tokens burned and cast boosted!" : "Tokens successfully processed."}
+                {mode === 'burn_boost' && selectedCoin 
+                    ? `Tokens burned and ${selectedCoin.name} boosted!` 
+                    : "Tokens successfully processed."}
             </p>
             
             <div className="w-full max-w-sm space-y-3">
