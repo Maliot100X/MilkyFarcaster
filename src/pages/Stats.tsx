@@ -1,4 +1,4 @@
-import { Share2, Users, TrendingUp, Award, Loader2, Trophy, Medal } from "lucide-react";
+import { Share2, Users, TrendingUp, Award, Loader2, Trophy, Medal, Gift } from "lucide-react";
 import { useFarcaster } from "../context/FarcasterContext";
 import sdk from "@farcaster/miniapp-sdk";
 import { useQuery } from "@tanstack/react-query";
@@ -145,6 +145,31 @@ export function Stats() {
         <h2 className="text-xl font-bold mb-4 flex items-center">
             <Trophy className="mr-2 text-yellow-500" /> Global Leaderboard
         </h2>
+
+        {/* Prize Banner */}
+        <div className="bg-gradient-to-r from-yellow-900/40 to-amber-900/40 border border-yellow-500/30 rounded-xl p-4 mb-4">
+            <h3 className="text-sm font-bold text-yellow-200 mb-2 flex items-center">
+                <Gift className="w-4 h-4 mr-1" />
+                Weekly Prizes
+            </h3>
+            <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-black/30 p-2 rounded-lg">
+                    <p className="text-[10px] text-gray-400">1st Place</p>
+                    <p className="font-bold text-yellow-400">$50</p>
+                    <p className="text-[10px] text-yellow-200/70">+1 Free Boost</p>
+                </div>
+                <div className="bg-black/30 p-2 rounded-lg">
+                    <p className="text-[10px] text-gray-400">2nd Place</p>
+                    <p className="font-bold text-gray-300">$25</p>
+                    <p className="text-[10px] text-gray-300/70">+1 Free Boost</p>
+                </div>
+                <div className="bg-black/30 p-2 rounded-lg">
+                    <p className="text-[10px] text-gray-400">3rd Place</p>
+                    <p className="font-bold text-amber-500">Free Sub</p>
+                    <p className="text-[10px] text-amber-500/70">24 Hours</p>
+                </div>
+            </div>
+        </div>
         
         <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
             {leaderboard.length === 0 ? (

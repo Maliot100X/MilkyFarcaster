@@ -25,7 +25,7 @@ export default async function handler(
 
     const { data: burns } = await supabase
       .from('burns')
-      .select('amount, created_at, token')
+      .select('amount, created_at, token, xp_awarded')
       .eq('fid', fid)
       .order('created_at', { ascending: false });
 
@@ -33,8 +33,11 @@ export default async function handler(
     const xp = userData?.xp || 0;
     const level = Math.floor(Math.sqrt(xp / 100)) + 1; // Simple quadratic leveling
     const burnCount = burns?.length || 0;
-    // Mock USD value: assume each burn action averaged $2.50 of trash + fee
-    const totalBurnedUsd = (burnCount * 2.50).toFixed(2); 
+    
+    // Real Stats from DB
+    const stats = userData?.data?.stats || {};
+    const totalBurnedUsd = (stats.burned_usd || 0).toFixed(2);
+    const totalSwappedUsd = (stats.swapped_usd || 0).toFixed(2);
 
     // Calculate Rank
     const { count: rankCount, error: rankError } = await supabase
@@ -106,6 +109,7 @@ export default async function handler(
           rank,
           title: neynarStats?.archetype || "Novice", // Fallback title
           totalBurnedUsd,
+          totalSwappedUsd,
           burnCount,
           subscription: {
               status: userData?.data?.subscription_status || 'free',

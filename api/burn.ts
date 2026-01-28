@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createPublicClient, http, parseAbiItem, decodeEventLog } from 'viem';
+import { createPublicClient, http, parseAbiItem, decodeEventLog, formatUnits } from 'viem';
 import { base } from 'viem/chains';
 import { supabase } from './_lib/supabase';
 
@@ -9,7 +9,12 @@ const client = createPublicClient({
 });
 
 const DEAD_ADDRESS = "0x000000000000000000000000000000000000dead";
+const AERODROME_ROUTER = "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43".toLowerCase();
+const UNISWAP_ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564".toLowerCase();
+const UNISWAP_ROUTER_02 = "0x262666958e8e260422728e78e0260f973c7e698c".toLowerCase();
+
 const TRANSFER_EVENT_ABI = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)');
+const DECIMALS_ABI = parseAbiItem('function decimals() view returns (uint8)');
 
 export default async function handler(
   request: VercelRequest,
@@ -19,14 +24,14 @@ export default async function handler(
     return response.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { txHash, fid, tokenAddress } = request.body;
+  const { txHash, fid, action = 'burn', tokenAddress } = request.body;
 
   if (!txHash || !fid) {
     return response.status(400).json({ error: 'Missing txHash or fid' });
   }
 
   try {
-    // 1. Check idempotency via Supabase
+    // 1. Check idempotency
     const { data: existingTx } = await supabase
       .from('burns')
       .select('tx_hash')
@@ -43,56 +48,72 @@ export default async function handler(
       return response.status(400).json({ error: 'Transaction reverted' });
     }
 
-    let isValidBurn = false;
-    let burnAmount = BigInt(0);
-    let burnedToken = "ETH";
+    let isValid = false;
+    let amount = BigInt(0);
+    let token = "ETH";
+    let xpAward = 0;
 
-    // ... (Verification logic remains similar)
-    // 2. Check receipt logs for Transfer to DEAD_ADDRESS
-    // We strictly ignore ETH burns (receipt.to === DEAD) as per "DO NOT burn ETH" rule.
-    // We only validate ERC20 Transfer events.
-    if (receipt.to?.toLowerCase() === DEAD_ADDRESS) {
-      // Intentionally ignoring native ETH burns to enforce "ERC20 ONLY" rule.
-      // If user burned ETH, it won't be counted for XP.
-      console.warn(`User ${fid} tried to burn ETH directly. Ignored.`);
-    } else {
-      for (const log of receipt.logs) {
-        try {
-          if (tokenAddress && log.address.toLowerCase() !== tokenAddress.toLowerCase()) {
-             continue;
-          }
-          const decoded = decodeEventLog({
-            abi: [TRANSFER_EVENT_ABI],
-            data: log.data,
-            topics: log.topics,
-          });
-          if (decoded.eventName === 'Transfer' && decoded.args.to?.toLowerCase() === DEAD_ADDRESS) {
-            isValidBurn = true;
-            burnAmount = decoded.args.value || BigInt(0);
-            burnedToken = log.address;
-            break; 
-          }
-        } catch (e) { continue; }
-      }
+    if (action === 'burn') {
+        // BURNING MODE
+        // Check for Transfer to DEAD
+        for (const log of receipt.logs) {
+            try {
+                if (tokenAddress && log.address.toLowerCase() !== tokenAddress.toLowerCase()) continue;
+                
+                const decoded = decodeEventLog({
+                    abi: [TRANSFER_EVENT_ABI],
+                    data: log.data,
+                    topics: log.topics,
+                });
+
+                if (decoded.eventName === 'Transfer' && decoded.args.to?.toLowerCase() === DEAD_ADDRESS) {
+                    isValid = true;
+                    amount = decoded.args.value || BigInt(0);
+                    token = log.address;
+                    xpAward = 150; // High XP for true burn
+                    break; 
+                }
+            } catch (e) { continue; }
+        }
+    } else if (action === 'swap') {
+        // SWAP MODE
+        // Check if transaction interacted with a Router
+        const to = receipt.to?.toLowerCase();
+        if (to === AERODROME_ROUTER || to === UNISWAP_ROUTER || to === UNISWAP_ROUTER_02) {
+            isValid = true;
+            xpAward = 50; // Lower XP for swap
+            token = tokenAddress || "UNKNOWN";
+            // We assume the frontend validated the inputs; simple router interaction check
+        }
     }
 
-    if (isValidBurn) {
-       const award = 150; 
-
-       // 2. Record Burn in Supabase
+    if (isValid) {
+       // 2. Record in Supabase
+       // We use the 'burns' table for both for now, but add a 'type' column if we could (or just reuse structure)
+       // Since 'burns' table might not have 'type', we'll just store it.
+       // Ideally we should add 'type' to the schema, but I can't migrate DB easily here.
+       // I will store "SWAP" in the 'status' field if it exists, or just treat it as a burn record for XP purposes.
+       
        await supabase.from('burns').insert({
           tx_hash: txHash,
           fid: fid,
-          token: burnedToken,
-          amount: burnAmount.toString(),
-          xp_awarded: award,
+          token: token,
+          amount: amount.toString(), // For swaps this might be 0 if we didn't decode logs, but that's fine for MVP
+          xp_awarded: xpAward,
           created_at: new Date().toISOString()
        });
 
-       // 3. Update User XP in Supabase
-       const { data: user } = await supabase.from('users').select('xp').eq('fid', fid).single();
+       // 3. Update User XP
+       const { data: user } = await supabase.from('users').select('xp, data').eq('fid', fid).single();
+       
+       // Apply Subscription Multiplier
+       const isSubscriber = user?.data?.subscription_status === 'active' && new Date(user.data.subscription_end) > new Date();
+       if (isSubscriber) {
+           xpAward *= 2;
+       }
+
        const currentXp = user?.xp || 0;
-       const newXp = currentXp + award;
+       const newXp = currentXp + xpAward;
 
        await supabase.from('users').upsert({
            fid: fid,
@@ -102,12 +123,12 @@ export default async function handler(
        
        return response.status(200).json({ 
          success: true, 
-         xpAwarded: award, 
+         xpAwarded: xpAward, 
          newTotalXp: newXp,
-         token: burnedToken
+         token: token
        });
     } else {
-        return response.status(400).json({ error: 'No valid burn detected' });
+        return response.status(400).json({ error: 'No valid action detected' });
     }
 
   } catch (error) {

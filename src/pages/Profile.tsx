@@ -36,7 +36,7 @@ export function Profile() {
   }
 
   const { gameData, user: neynarUser } = profileData || {};
-  const { xp, level, title, totalBurnedUsd, recentActivity, rank } = gameData || { xp: 0, level: 1, title: 'Novice', totalBurnedUsd: '0.00', recentActivity: [], rank: '-' };
+  const { xp, level, title, totalBurnedUsd, totalSwappedUsd, recentActivity, rank } = gameData || { xp: 0, level: 1, title: 'Novice', totalBurnedUsd: '0.00', totalSwappedUsd: '0.00', recentActivity: [], rank: '-' };
   
   // XP Progress Calculation
   const currentLevelBaseXp = Math.pow(level - 1, 2) * 100;
@@ -145,14 +145,28 @@ export function Profile() {
           </div>
         </div>
         
-        <div className="mt-4 pt-4 border-t border-gray-700 grid grid-cols-2 gap-4 text-center">
+        <div className="mt-4 pt-4 border-t border-gray-700 grid grid-cols-3 gap-2 text-center">
             <div>
                 <p className="text-xs text-gray-400 mb-1">Burned Value</p>
                 <p className="text-lg font-bold text-orange-500">${totalBurnedUsd}</p>
             </div>
             <div>
+                <p className="text-xs text-gray-400 mb-1">Swapped Value</p>
+                <p className="text-lg font-bold text-green-500">${totalSwappedUsd}</p>
+            </div>
+            <div>
                 <p className="text-xs text-gray-400 mb-1">Global Rank</p>
                 <p className="text-lg font-bold text-purple-500">#{rank || '-'}</p>
+            </div>
+        </div>
+
+        {/* Prizes Info */}
+        <div className="mt-4 bg-black/20 p-3 rounded-lg text-xs text-gray-400 text-center border border-white/5">
+            <p className="font-bold text-yellow-500 mb-1 uppercase tracking-wide">🏆 Season Prizes</p>
+            <div className="flex justify-between items-center text-[10px] space-x-1">
+                <span>🥇 $50 + Boost</span>
+                <span>🥈 $25 + Boost</span>
+                <span>🥉 Free Sub</span>
             </div>
         </div>
       </div>
