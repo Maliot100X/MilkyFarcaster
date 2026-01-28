@@ -106,7 +106,7 @@ export function More() {
              <div className="flex items-start space-x-3 p-3 bg-gray-900/50 rounded-lg">
                 <div className="bg-blue-900/30 p-2 rounded-full"><Trophy size={14} className="text-blue-400" /></div>
                 <div>
-                    <p className="text-sm text-gray-200">Welcome to MilkyFarcaster Phase 2!</p>
+                    <p className="text-sm text-gray-200">Welcome to MilkyFarcaster!</p>
                     <p className="text-xs text-gray-500">Just now</p>
                 </div>
              </div>

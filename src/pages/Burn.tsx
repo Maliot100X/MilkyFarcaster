@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
 import sdk from "@farcaster/miniapp-sdk";
-import { Flame, Loader2, Wallet, CheckCircle2, Repeat, AlertTriangle, Share2, ArrowRight } from "lucide-react";
+import { Flame, Loader2, Wallet, CheckCircle2, Repeat, Rocket, AlertTriangle, Share2 } from "lucide-react";
 import { useAccount, useSendTransaction } from "wagmi";
-import { parseEther, encodeFunctionData, parseUnits } from "viem";
+import { parseEther, encodeFunctionData } from "viem";
 import { useFarcaster } from "../context/FarcasterContext";
 import { fetchTokenBalances, type TokenBalance } from "../lib/scanner";
 import { ERC20_ABI, AERODROME_ROUTER_ABI, AERODROME_ROUTER_ADDRESS, WETH_ADDRESS, UNISWAP_ROUTER_ABI, UNISWAP_ROUTER_ADDRESS } from "../lib/abis";
 
-const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD";
 const PLATFORM_FEE_ETH = "0.0001"; // Approx $0.20
 
 export function Burn() {
   const { context } = useFarcaster();
   const { address, isConnected } = useAccount();
-  const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x0000000000000000000000000000000000000000";
+  
+  // BURN_WALLET: Use Platform Wallet as the "Specific Wallet" for burning/collection
+  const BURN_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x000000000000000000000000000000000000dEaD";
 
-  // Mode: 'burn' (Destruction) or 'swap' (Recycle)
-  const [mode, setMode] = useState<'burn' | 'swap'>('burn');
+  // Mode: 'burn_only', 'burn_boost', 'recycle'
+  const [mode, setMode] = useState<'burn_only' | 'burn_boost' | 'recycle'>('burn_only');
   
   // Scanner State
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
@@ -24,10 +25,14 @@ export function Burn() {
 
   // Selection State
   const [selectedTokens, setSelectedTokens] = useState<TokenBalance[]>([]);
-  const [amount, setAmount] = useState(""); // Only used for single token selection
   const [status, setStatus] = useState<"idle" | "fee_pending" | "fee_confirming" | "action_pending" | "action_confirming" | "verifying" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [aiCastText, setAiCastText] = useState("");
+  
+  // Boost State
+  const [boostUrl, setBoostUrl] = useState("");
+  const [boostPreview, setBoostPreview] = useState<any>(null);
+  const [isVerifyingCast, setIsVerifyingCast] = useState(false);
   
   // Confirmation State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -74,11 +79,38 @@ export function Burn() {
     }
   };
 
+  const verifyBoostCast = async () => {
+    if (!boostUrl) return;
+    setIsVerifyingCast(true);
+    setBoostPreview(null);
+    try {
+        const res = await fetch('/api/boost', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'preview', url: boostUrl })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            setBoostPreview(data);
+        } else {
+            setErrorMessage("Invalid Farcaster URL or Cast not found");
+        }
+    } catch (e) {
+        setErrorMessage("Failed to verify cast");
+    } finally {
+        setIsVerifyingCast(false);
+    }
+  };
+
   const generateAiCast = async (customContext?: string) => {
     setAiCastText("Generating catchy cast... 🤖");
-    const actionVerb = mode === 'burn' ? "burned" : "recycled";
+    const actionVerb = mode === 'recycle' ? "recycled" : "burned";
     const tokenNames = selectedTokens.length > 3 ? `${selectedTokens.length} tokens` : selectedTokens.map(t => t.symbol).join(", ");
-    const contextStr = customContext || `User just ${actionVerb} ${tokenNames} on MilkyFarcaster.`;
+    let contextStr = customContext || `User just ${actionVerb} ${tokenNames} on MilkyFarcaster.`;
+    
+    if (mode === 'burn_boost' && boostPreview) {
+        contextStr += ` And boosted a cast by @${boostPreview.author.username}!`;
+    }
     
     try {
       const res = await fetch('/api/ai', {
@@ -98,6 +130,10 @@ export function Burn() {
 
   const initiateAction = () => {
     if (!isConnected || selectedTokens.length === 0) return;
+    if (mode === 'burn_boost' && !boostPreview) {
+        setErrorMessage("Please verify a cast to boost first!");
+        return;
+    }
     setShowConfirmModal(true);
   };
 
@@ -110,7 +146,7 @@ export function Burn() {
       // 1. Platform Fee (Once per batch)
       console.log("Paying fee...");
       await sendTransactionAsync({
-        to: PLATFORM_WALLET,
+        to: BURN_WALLET, // Fee goes to platform wallet
         value: parseEther(PLATFORM_FEE_ETH),
       });
       setStatus("fee_confirming");
@@ -118,37 +154,15 @@ export function Burn() {
       // 2. Execute Action Loop
       setStatus("action_pending");
       let lastHash = "";
+      console.log("Applying slippage:", slippage);
 
       for (const token of selectedTokens) {
           let amountBigInt = token.rawBalance; // Default to full balance
 
-          // If single token selected and user entered specific amount
-          if (selectedTokens.length === 1 && amount) {
-            try {
-              const parsed = parseUnits(amount, token.decimals);
-              if (parsed > 0n && parsed <= token.rawBalance) {
-                amountBigInt = parsed;
-              }
-            } catch (e) {
-              console.warn("Invalid amount input, using full balance");
-            }
-          }
-
-          if (mode === 'burn') {
-            // BURN: Transfer to DEAD
-            lastHash = await sendTransactionAsync({
-              to: token.address,
-              data: encodeFunctionData({
-                abi: ERC20_ABI,
-                functionName: 'transfer',
-                args: [DEAD_ADDRESS, amountBigInt]
-              })
-            });
-          } else {
-            // SWAP: Try Aerodrome (Primary) -> Uniswap V3 (Fallback)
+          if (mode === 'recycle') {
+            // RECYCLE: Try Aerodrome (Primary) -> Uniswap V3 (Fallback)
             try {
               // A. Try Aerodrome
-              // Approve Aerodrome
               await sendTransactionAsync({
                 to: token.address,
                 data: encodeFunctionData({
@@ -158,41 +172,28 @@ export function Burn() {
                 })
               });
 
-              // Swap Aerodrome
               const routes = [{
                 from: token.address as `0x${string}`,
                 to: WETH_ADDRESS as `0x${string}`,
                 stable: false,
-                factory: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" as `0x${string}` // Aerodrome Factory
+                factory: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" as `0x${string}`
               }];
 
-              const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 20); // 20 mins
-              const amountOutMin = slippage === "100" ? 0n : 0n; // Logic for other slippage values can be added here
+              const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 20);
+              const amountOutMin = 0n; 
               
               lastHash = await sendTransactionAsync({
                   to: AERODROME_ROUTER_ADDRESS,
                   data: encodeFunctionData({
                       abi: AERODROME_ROUTER_ABI,
                       functionName: 'swapExactTokensForETHSupportingFeeOnTransferTokens',
-                      args: [
-                          amountBigInt, 
-                          amountOutMin,
-                          routes as any,
-                          address as `0x${string}`,
-                          deadline
-                      ]
+                      args: [amountBigInt, amountOutMin, routes as any, address as `0x${string}`, deadline]
                   })
               });
             } catch (e: any) {
-              // Check if user rejected - if so, abort entirely
-              if (e.message?.toLowerCase().includes("rejected") || e.cause?.code === 4001) {
-                throw e;
-              }
-
-              console.warn(`Aerodrome failed for ${token.symbol}, trying Uniswap V3...`, e);
-
+              if (e.message?.toLowerCase().includes("rejected") || e.cause?.code === 4001) throw e;
+              
               // B. Fallback: Uniswap V3
-              // Approve Uniswap
               await sendTransactionAsync({
                 to: token.address,
                 data: encodeFunctionData({
@@ -202,26 +203,19 @@ export function Burn() {
                 })
               });
 
-              // Swap Uniswap (Fee 3000 / 0.3% - most common for non-stable)
-              // const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 20); // Not needed for exactInputSingle
-              const amountOutMinimum = 0n; // Slippage 100%
-              const sqrtPriceLimitX96 = 0n;
-
               const params = {
                 tokenIn: token.address as `0x${string}`,
                 tokenOut: WETH_ADDRESS as `0x${string}`,
-                fee: 3000, // 0.3%
+                fee: 3000,
                 recipient: address as `0x${string}`,
                 amountIn: amountBigInt,
-                amountOutMinimum,
-                sqrtPriceLimitX96
+                amountOutMinimum: 0n,
+                sqrtPriceLimitX96: 0n
               };
 
               lastHash = await sendTransactionAsync({
                 to: UNISWAP_ROUTER_ADDRESS,
-                value: 0n, // ERC20 -> ETH swap usually involves WETH unwrapping, but exactInputSingle on SwapRouter02 outputs WETH if tokenOut is WETH. 
-                           // Wait, SwapRouter02 on Base supports unwrapWETH9 but we are calling exactInputSingle which returns WETH. 
-                           // For simplicity in this fallback, getting WETH is acceptable as it's "liquid".
+                value: 0n,
                 data: encodeFunctionData({
                   abi: UNISWAP_ROUTER_ABI,
                   functionName: 'exactInputSingle',
@@ -229,13 +223,21 @@ export function Burn() {
                 })
               });
             }
+          } else {
+            // BURN ONLY or BURN BOOST: Transfer to BURN_WALLET
+            lastHash = await sendTransactionAsync({
+              to: token.address,
+              data: encodeFunctionData({
+                abi: ERC20_ABI,
+                functionName: 'transfer',
+                args: [BURN_WALLET, amountBigInt]
+              })
+            });
           }
       }
 
       setStatus("action_confirming");
       
-      // Verify the LAST hash to trigger success state
-      // In a real app we might want to verify all, but for UX flow we just wait for the last one
       const lastToken = selectedTokens[selectedTokens.length - 1];
       setTimeout(() => verifyTransaction(lastHash, mode, lastToken?.address), 5000);
 
@@ -246,9 +248,11 @@ export function Burn() {
     }
   };
 
-  const verifyTransaction = async (hash: string, actionType: 'burn' | 'swap', tokenAddress?: string) => {
+  const verifyTransaction = async (hash: string, currentMode: string, tokenAddress?: string) => {
     setStatus("verifying");
     try {
+        const actionType = currentMode === 'recycle' ? 'swap' : 'burn';
+        
         const res = await fetch('/api/burn', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -256,21 +260,37 @@ export function Burn() {
                 txHash: hash, 
                 fid: context?.user.fid || 0,
                 action: actionType,
-                tokenAddress: tokenAddress || selectedTokens[0]?.address // Fallback
+                tokenAddress: tokenAddress || selectedTokens[0]?.address
             })
         });
         
         const data = await res.json();
+        
         if (data.success) {
+            // If Burn + Boost, now trigger the boost
+            if (currentMode === 'burn_boost' && boostPreview) {
+                 await fetch('/api/boost', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'burn_boost', // Need to handle this in API
+                        txHash: hash,
+                        cast: boostPreview,
+                        fid: context?.user.fid || 0,
+                        tokenValueUsd: selectedTokens.reduce((acc, t) => acc + (t.usdValue || 0) * parseFloat(t.balance), 0)
+                    })
+                });
+            }
+
             setStatus("success");
             generateAiCast();
-            scanTokens(); // Refresh balances
+            scanTokens();
         } else {
-            setTimeout(() => verifyTransaction(hash, actionType, tokenAddress), 3000);
+            setTimeout(() => verifyTransaction(hash, currentMode, tokenAddress), 3000);
         }
     } catch (e) {
         console.error(e);
-        setStatus("success"); // Assume success if API fails but tx didn't throw
+        setStatus("success"); 
     }
   };
 
@@ -297,41 +317,100 @@ export function Burn() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
-      {/* Header & Mode Switch */}
+      {/* Mode Switcher */}
       <div className="flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Trash Disposal</h1>
-            <div className="flex bg-gray-800 rounded-lg p-1">
-                <button 
-                    onClick={() => { setMode('burn'); setSelectedTokens([]); }}
-                    className={`px-4 py-2 rounded-md text-sm font-bold flex items-center space-x-2 transition-all ${mode === 'burn' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    <Flame size={16} />
-                    <span>Burn</span>
-                </button>
-                <button 
-                    onClick={() => { setMode('swap'); setSelectedTokens([]); }}
-                    className={`px-4 py-2 rounded-md text-sm font-bold flex items-center space-x-2 transition-all ${mode === 'swap' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    <Repeat size={16} />
-                    <span>Recycle</span>
-                </button>
-            </div>
+          <div className="flex bg-gray-800 rounded-lg p-1 overflow-x-auto">
+              <button 
+                  onClick={() => { setMode('burn_only'); setSelectedTokens([]); }}
+                  className={`flex-1 px-3 py-2 rounded-md text-xs font-bold flex items-center justify-center space-x-1 transition-all ${mode === 'burn_only' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                  <Flame size={14} />
+                  <span>Burn Only</span>
+              </button>
+              <button 
+                  onClick={() => { setMode('burn_boost'); setSelectedTokens([]); }}
+                  className={`flex-1 px-3 py-2 rounded-md text-xs font-bold flex items-center justify-center space-x-1 transition-all ${mode === 'burn_boost' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                  <Rocket size={14} />
+                  <span>Burn & Boost</span>
+              </button>
+              <button 
+                  onClick={() => { setMode('recycle'); setSelectedTokens([]); }}
+                  className={`flex-1 px-3 py-2 rounded-md text-xs font-bold flex items-center justify-center space-x-1 transition-all ${mode === 'recycle' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                  <Repeat size={14} />
+                  <span>Recycle</span>
+              </button>
           </div>
           
-          <div className={`p-4 rounded-xl border ${mode === 'burn' ? 'bg-red-900/20 border-red-500/30' : 'bg-green-900/20 border-green-500/30'}`}>
+          <div className={`p-4 rounded-xl border ${mode === 'recycle' ? 'bg-green-900/20 border-green-500/30' : 'bg-red-900/20 border-red-500/30'}`}>
               <p className="text-sm text-gray-300 flex items-start space-x-2">
-                  <AlertTriangle size={16} className={mode === 'burn' ? "text-red-400" : "text-green-400"} />
+                  <AlertTriangle size={16} className={mode === 'recycle' ? "text-green-400" : "text-red-400"} />
                   <span>
-                      {mode === 'burn' 
-                        ? "TRUE BURN: Tokens are sent to 0xdead and destroyed forever. You earn max XP." 
-                        : "RECYCLE: Tokens are swapped for ETH. You get value back but earn less XP."}
+                      {mode === 'burn_only' && "Transfer tokens to platform wallet for destruction. 150 XP."}
+                      {mode === 'burn_boost' && "Transfer tokens to boost a cast. Higher value = More visibility!"}
+                      {mode === 'recycle' && "Swap tokens for ETH. Recover value but earn less XP."}
                   </span>
               </p>
           </div>
+
+          {mode === 'recycle' && (
+             <div className="flex justify-between items-center px-2">
+                <label className="text-xs text-gray-400">Slippage Tolerance</label>
+                <select 
+                    value={slippage} 
+                    onChange={(e) => setSlippage(e.target.value)}
+                    className="bg-gray-800 text-white text-xs rounded border border-gray-700 px-2 py-1 outline-none"
+                >
+                    <option value="100">100% (Degen)</option>
+                    <option value="10">10%</option>
+                    <option value="5">5%</option>
+                    <option value="1">1%</option>
+                </select>
+             </div>
+          )}
+
+          {errorMessage && (
+              <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded-lg text-sm">
+                  {errorMessage}
+              </div>
+          )}
       </div>
 
-      {/* Token Scanner List */}
+
+      {/* Burn & Boost: Cast Selection */}
+      {mode === 'burn_boost' && (
+          <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase">Cast to Boost</label>
+              <div className="flex space-x-2">
+                  <input 
+                    type="text" 
+                    placeholder="Paste Farcaster URL or handle" 
+                    value={boostUrl}
+                    onChange={(e) => setBoostUrl(e.target.value)}
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                  />
+                  <button 
+                    onClick={verifyBoostCast}
+                    disabled={isVerifyingCast || !boostUrl}
+                    className="bg-orange-600 px-4 py-2 rounded-lg font-bold text-white text-sm disabled:opacity-50"
+                  >
+                    {isVerifyingCast ? <Loader2 size={16} className="animate-spin" /> : "Verify"}
+                  </button>
+              </div>
+              {boostPreview && (
+                  <div className="bg-gray-800 p-3 rounded-lg flex items-start space-x-3 border border-orange-500/50">
+                      <img src={boostPreview.author.pfp_url} className="w-8 h-8 rounded-full" />
+                      <div>
+                          <p className="text-sm font-bold text-white">{boostPreview.author.username}</p>
+                          <p className="text-xs text-gray-400 line-clamp-2">{boostPreview.text}</p>
+                      </div>
+                  </div>
+              )}
+          </div>
+      )}
+
+      {/* Token List */}
       <div className="space-y-4">
           <div className="flex justify-between items-center">
               <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider">Your Tokens</h3>
@@ -393,184 +472,108 @@ export function Burn() {
           )}
       </div>
 
-      {/* Action Area */}
+      {/* Action Button */}
       {selectedTokens.length > 0 && (
-          <div className={`rounded-2xl p-6 animate-in slide-in-from-bottom-4 border ${mode === 'burn' ? 'bg-gradient-to-br from-red-900/40 to-orange-900/40 border-red-500/30' : 'bg-gradient-to-br from-green-900/40 to-blue-900/40 border-green-500/30'}`}>
-              <div className="flex justify-between items-center mb-6">
-                  <div>
-                      <h2 className="text-3xl font-bold text-white">{selectedTokens.length} Tokens</h2>
-                      <p className={mode === 'burn' ? "text-red-400 font-bold" : "text-green-400 font-bold"}>Selected for {mode === 'burn' ? 'Burning' : 'Recycling'}</p>
-                  </div>
-                  
-                  {mode === 'swap' && (
-                      <div className="flex items-center space-x-2 bg-black/40 px-3 py-1 rounded-lg border border-white/10">
-                          <span className="text-xs text-gray-400">Slippage</span>
-                          <select 
-                            value={slippage}
-                            onChange={(e) => setSlippage(e.target.value)}
-                            className="bg-transparent text-white text-xs font-bold focus:outline-none"
-                          >
-                              <option value="100">100% (Recycle)</option>
-                              <option value="10">10%</option>
-                              <option value="5">5%</option>
-                              <option value="1">1%</option>
-                          </select>
-                      </div>
-                  )}
-              </div>
-
-              {selectedTokens.length === 1 && (
-                 <div className="mb-4">
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                        <span>Amount to {mode === 'burn' ? 'burn' : 'swap'}</span>
-                        <button onClick={() => setAmount(selectedTokens[0].balance)} className="text-blue-400">MAX</button>
-                    </div>
-                    <input 
-                        type="number"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder="Amount"
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-lg font-mono text-white focus:outline-none focus:border-white/30"
-                    />
-                 </div>
-              )}
-              
-              <button
+          <div className="fixed bottom-20 left-4 right-4 z-20">
+            <button
                 onClick={initiateAction}
-                className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg ${mode === 'burn' ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-red-900/20' : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-green-900/20'}`}
-              >
-                 {mode === 'burn' ? "🔥 Burn Trash" : "♻️ Recycle to ETH"}
-              </button>
-
-              {mode === 'swap' && (
-                  <div className="flex items-center justify-between bg-black/20 p-3 rounded-lg mb-4 mt-4">
-                      <span className="text-sm text-gray-400">Est. Value</span>
-                      <div className="flex items-center space-x-2 text-white font-bold">
-                          <span>
-                            $
-                            {selectedTokens.reduce((acc, t) => {
-                                // If single token and partial amount, calculate proportional value
-                                if (selectedTokens.length === 1 && amount && t.usdValue) {
-                                    return acc + (parseFloat(amount) * t.usdValue);
-                                }
-                                // Otherwise full balance value
-                                return acc + ((t.usdValue || 0) * parseFloat(t.balance));
-                            }, 0).toFixed(2)}
-                          </span>
-                      </div>
-                  </div>
-              )}
-
-              {status === "success" ? (
-                  <div className="text-center py-4">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 text-green-500 mb-3">
-                          <CheckCircle2 size={32} />
-                      </div>
-                      <h3 className="text-xl font-bold text-white mb-2">{mode === 'burn' ? "Incinerated!" : "Recycled!"}</h3>
-                      <button 
-                          onClick={handleCast}
-                          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl flex items-center justify-center space-x-2"
-                      >
-                          <Share2 size={20} />
-                          <span>Cast Result</span>
-                      </button>
-                      <button 
-                        onClick={() => { setStatus("idle"); setSelectedTokens([]); setAmount(""); }}
-                        className="mt-4 text-gray-500 text-sm hover:text-gray-300"
-                      >
-                        Do it again
-                      </button>
-                  </div>
-              ) : (
-                  <>
-                    <div className="bg-black/20 rounded-lg p-3 mb-4 border border-white/10">
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-400">Platform Fee</span>
-                            <span className="text-white font-mono">{PLATFORM_FEE_ETH} ETH</span>
-                        </div>
-                    </div>
-                    
-                    <button
-                        onClick={executeAction}
-                        disabled={status !== "idle" || (selectedTokens.length === 1 && (!amount || parseFloat(amount) <= 0))}
-                        className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center space-x-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                            mode === 'burn' 
-                            ? 'bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/30' 
-                            : 'bg-green-600 hover:bg-green-700 shadow-lg shadow-green-900/30'
-                        }`}
-                    >
-                        {status !== "idle" ? (
-                            <>
-                                <Loader2 className="animate-spin" />
-                                <span>Processing...</span>
-                            </>
-                        ) : (
-                            <>
-                                {mode === 'burn' ? <Flame size={20} /> : <Repeat size={20} />}
-                                <span>{mode === 'burn' ? `BURN ${selectedTokens.length} ITEMS` : `RECYCLE ${selectedTokens.length} ITEMS`}</span>
-                            </>
-                        )}
-                    </button>
-                    {errorMessage && <p className="text-red-400 text-center text-sm mt-3">{errorMessage}</p>}
-                  </>
-              )}
+                disabled={mode === 'burn_boost' && !boostPreview}
+                className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'recycle' ? 'bg-green-600' : mode === 'burn_boost' ? 'bg-orange-600' : 'bg-red-600'}`}
+            >
+                {mode === 'recycle' && <Repeat />}
+                {mode === 'burn_only' && <Flame />}
+                {mode === 'burn_boost' && <Rocket />}
+                <span>
+                    {mode === 'recycle' ? "Recycle Selected" : mode === 'burn_boost' ? "Burn & Boost" : "Burn Selected"}
+                </span>
+            </button>
           </div>
       )}
 
-      {/* Confirmation Modal */}
+      {/* Confirm Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className={`w-full max-w-md bg-[#1a1b1e] rounded-2xl border p-6 shadow-2xl ${mode === 'burn' ? 'border-red-500/50' : 'border-green-500/50'}`}>
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className={`p-4 rounded-full ${mode === 'burn' ? 'bg-red-500/20 text-red-500' : 'bg-green-500/20 text-green-500'}`}>
-                {mode === 'burn' ? <Flame size={32} /> : <AlertTriangle size={32} />}
-              </div>
-              
-              <h3 className="text-2xl font-bold text-white">
-                {mode === 'burn' ? "IRREVERSIBLE WARNING" : "CONFIRM RECYCLE"}
-              </h3>
-              
-              <div className="space-y-2 text-gray-300">
-                {mode === 'burn' ? (
-                  <>
-                    <p className="font-bold text-red-400">You are about to DESTROY {selectedTokens.length} tokens FOREVER.</p>
-                    <p>This action CANNOT be undone. The tokens will be sent to the burn address (0xdead).</p>
-                  </>
-                ) : (
-                  <>
-                    <p>You are swapping {selectedTokens.length} tokens for ETH.</p>
-                    <div className="bg-black/40 p-3 rounded-lg border border-white/10 mt-2">
-                       <div className="flex justify-between text-sm">
-                         <span>Slippage:</span>
-                         <span className="font-bold">{slippage}%</span>
-                       </div>
-                       <p className="text-xs text-gray-500 mt-2">Output is estimated. Low liquidity tokens may fail.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm">
+                <h3 className="text-xl font-bold text-white mb-4">Confirm Action</h3>
+                
+                <div className="space-y-4 mb-6">
+                    <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Action</span>
+                        <span className="font-bold text-white uppercase">{mode.replace('_', ' ')}</span>
                     </div>
-                  </>
-                )}
-              </div>
+                    <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Tokens</span>
+                        <span className="font-bold text-white">{selectedTokens.length} Selected</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Platform Fee</span>
+                        <span className="font-bold text-white">{PLATFORM_FEE_ETH} ETH</span>
+                    </div>
+                    {mode === 'burn_boost' && boostPreview && (
+                        <div className="bg-orange-900/20 p-2 rounded border border-orange-500/30">
+                            <p className="text-xs text-orange-400 font-bold mb-1">Boosting Cast:</p>
+                            <p className="text-xs text-gray-300 line-clamp-1">{boostPreview.text}</p>
+                        </div>
+                    )}
+                </div>
 
-              <div className="flex gap-3 w-full mt-4">
-                <button 
-                  onClick={() => setShowConfirmModal(false)}
-                  className="flex-1 py-3 rounded-xl font-bold bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={executeAction}
-                  className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors flex items-center justify-center space-x-2 ${
-                    mode === 'burn' 
-                    ? 'bg-red-600 hover:bg-red-700' 
-                    : 'bg-green-600 hover:bg-green-700'
-                  }`}
-                >
-                  <span>{mode === 'burn' ? "I Understand, BURN IT" : "Confirm Swap"}</span>
-                  <ArrowRight size={18} />
-                </button>
-              </div>
+                <div className="flex space-x-3">
+                    <button 
+                        onClick={() => setShowConfirmModal(false)}
+                        className="flex-1 py-3 bg-gray-800 rounded-xl font-bold text-gray-400"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={executeAction}
+                        className="flex-1 py-3 bg-blue-600 rounded-xl font-bold text-white"
+                    >
+                        Confirm
+                    </button>
+                </div>
             </div>
-          </div>
+        </div>
+      )}
+
+      {/* Status Overlay */}
+      {status !== 'idle' && status !== 'success' && status !== 'error' && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
+            <Loader2 size={48} className="text-blue-500 animate-spin mb-4" />
+            <h3 className="text-xl font-bold text-white mb-2">Processing...</h3>
+            <p className="text-gray-400 text-sm">
+                {status === 'fee_pending' && "Please confirm platform fee..."}
+                {status === 'fee_confirming' && "Verifying fee payment..."}
+                {status === 'action_pending' && "Please confirm token transfer..."}
+                {status === 'action_confirming' && "Waiting for confirmation..."}
+                {status === 'verifying' && "Verifying onchain..."}
+            </p>
+        </div>
+      )}
+
+      {/* Success Overlay */}
+      {status === 'success' && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-6 text-center">
+            <CheckCircle2 size={64} className="text-green-500 mb-6" />
+            <h2 className="text-3xl font-bold text-white mb-2">Success!</h2>
+            <p className="text-gray-400 mb-8">
+                {mode === 'burn_boost' ? "Tokens burned and cast boosted!" : "Tokens successfully processed."}
+            </p>
+            
+            <div className="w-full max-w-sm space-y-3">
+                <button 
+                    onClick={handleCast}
+                    className="w-full py-4 bg-purple-600 rounded-xl font-bold text-white flex items-center justify-center space-x-2"
+                >
+                    <Share2 size={20} />
+                    <span>Cast to Farcaster</span>
+                </button>
+                <button 
+                    onClick={() => setStatus('idle')}
+                    className="w-full py-4 bg-gray-800 rounded-xl font-bold text-gray-400"
+                >
+                    Close
+                </button>
+            </div>
         </div>
       )}
     </div>
