@@ -37,6 +37,7 @@ export function Home() {
   const [isBoosting, setIsBoosting] = useState(false);
   const [boostSuccess, setBoostSuccess] = useState(false);
   const [aiCastText, setAiCastText] = useState("");
+  const [subscription, setSubscription] = useState<any>(null);
 
   // Helper for AI Cast
   const generateAiCast = async (contextText: string) => {
@@ -63,6 +64,19 @@ export function Home() {
     const interval = setInterval(fetchBoosts, 10000); // Poll every 10s
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (context?.user?.fid) {
+        fetch(`/api/stats?fid=${context.user.fid}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.gameData?.subscription) {
+                    setSubscription(data.gameData.subscription);
+                }
+            })
+            .catch(console.error);
+    }
+  }, [context?.user?.fid]);
 
   const fetchBoosts = async () => {
     try {
@@ -113,18 +127,23 @@ export function Home() {
     }
   };
 
-  const handleBoost = async (duration: '10m' | '30m') => {
-      if (!isConnected || !previewCast) return;
+  const handleBoost = async (type: 'paid' | 'free', duration: '10m' | '30m' = '10m') => {
+      if (!previewCast) return;
+      if (type === 'paid' && !isConnected) return;
+      
       setIsBoosting(true);
       
-      const price = duration === '10m' ? '0.0003' : '0.001'; // Approx $1 and $3
-      
       try {
-          // 1. Send Payment
-          const hash = await sendTransactionAsync({
-              to: PLATFORM_WALLET,
-              value: parseEther(price)
-          });
+          let hash = 'FREE_BOOST';
+
+          if (type === 'paid') {
+            const price = duration === '10m' ? '0.0003' : '0.001'; // Approx $1 and $3
+            // 1. Send Payment
+            hash = await sendTransactionAsync({
+                to: PLATFORM_WALLET,
+                value: parseEther(price)
+            });
+          }
 
           // 2. Verify & Store on Backend
           const res = await fetch('/api/boost', {
@@ -134,12 +153,15 @@ export function Home() {
                   action: 'boost',
                   txHash: hash,
                   cast: previewCast,
-                  duration,
+                  duration: type === 'free' ? '10m' : duration,
                   fid: context?.user.fid || 0
               })
           });
 
-          if (!res.ok) throw new Error("Verification failed");
+          if (!res.ok) {
+              const errData = await res.json();
+              throw new Error(errData.error || "Verification failed");
+          }
           
           setBoostSuccess(true);
           generateAiCast(previewCast.text);
@@ -147,9 +169,9 @@ export function Home() {
           setPreviewUrl("");
           fetchBoosts(); // Refresh list
 
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
-          alert("Boost failed. Please try again.");
+          alert(`Boost failed: ${e.message}`);
       } finally {
           setIsBoosting(false);
       }

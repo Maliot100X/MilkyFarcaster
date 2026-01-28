@@ -153,7 +153,7 @@ export function Profile() {
             </div>
             <div>
                 <p className="text-xs text-gray-400 mb-1">Global Rank</p>
-                <p className="text-lg font-bold text-purple-500">#42</p> {/* Mock for now */}
+                <p className="text-lg font-bold text-purple-500">#{rank || '-'}</p>
             </div>
         </div>
       </div>
