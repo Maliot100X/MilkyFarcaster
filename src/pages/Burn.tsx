@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import sdk from "@farcaster/miniapp-sdk";
-import { Flame, Loader2, Wallet, CheckCircle2, Repeat, Rocket, AlertTriangle, Share2 } from "lucide-react";
+import { Flame, Loader2, Wallet, CheckCircle2, Repeat, Rocket, AlertTriangle, Share2, Search } from "lucide-react";
 import { useAccount, useSendTransaction } from "wagmi";
 import { parseEther, encodeFunctionData } from "viem";
 import { useFarcaster } from "../context/FarcasterContext";
@@ -38,6 +38,7 @@ export function Burn() {
 
   // Settings
   const [slippage, setSlippage] = useState("100"); // Default 100%
+  const [tokenSearch, setTokenSearch] = useState("");
 
   const { sendTransactionAsync } = useSendTransaction();
 
@@ -71,10 +72,27 @@ export function Burn() {
   };
 
   const selectAll = () => {
-    if (selectedTokens.length === tokens.length) {
-      setSelectedTokens([]);
+    const filteredTokens = tokens.filter(token => {
+        const search = tokenSearch.toLowerCase();
+        return token.name.toLowerCase().includes(search) || 
+               token.symbol.toLowerCase().includes(search) || 
+               token.address.toLowerCase().includes(search);
+    });
+
+    if (selectedTokens.length >= filteredTokens.length && filteredTokens.length > 0) {
+      // If we have selected all visible tokens (or more), deselect all visible
+      const visibleAddresses = new Set(filteredTokens.map(t => t.address));
+      setSelectedTokens(selectedTokens.filter(t => !visibleAddresses.has(t.address)));
     } else {
-      setSelectedTokens(tokens);
+      // Select all visible tokens
+      // Merge current selected with new visible ones, avoiding duplicates
+      const newSelection = [...selectedTokens];
+      filteredTokens.forEach(t => {
+          if (!newSelection.find(sel => sel.address === t.address)) {
+              newSelection.push(t);
+          }
+      });
+      setSelectedTokens(newSelection);
     }
   };
 
@@ -381,16 +399,30 @@ export function Burn() {
 
       {/* Token List */}
       <div className="space-y-4">
-          <div className="flex justify-between items-center">
-              <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider">Your Tokens</h3>
-              <div className="flex items-center space-x-3">
-                  <button onClick={selectAll} className="text-gray-400 text-xs hover:text-white">
-                      {selectedTokens.length === tokens.length && tokens.length > 0 ? "Deselect All" : "Select All"}
-                  </button>
-                  <button onClick={scanTokens} disabled={isScanning} className="text-blue-400 text-xs flex items-center space-x-1">
-                      {isScanning ? <Loader2 size={12} className="animate-spin" /> : <Repeat size={12} />}
-                      <span>Rescan</span>
-                  </button>
+          <div className="flex flex-col space-y-3">
+              <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider">Your Tokens</h3>
+                  <div className="flex items-center space-x-3">
+                      <button onClick={selectAll} className="text-gray-400 text-xs hover:text-white">
+                          {selectedTokens.length === tokens.length && tokens.length > 0 ? "Deselect All" : "Select All"}
+                      </button>
+                      <button onClick={scanTokens} disabled={isScanning} className="text-blue-400 text-xs flex items-center space-x-1">
+                          {isScanning ? <Loader2 size={12} className="animate-spin" /> : <Repeat size={12} />}
+                          <span>Rescan</span>
+                      </button>
+                  </div>
+              </div>
+
+              {/* Token Search */}
+              <div className="relative">
+                 <input 
+                    type="text" 
+                    placeholder="Search by name or contract address..." 
+                    value={tokenSearch}
+                    onChange={(e) => setTokenSearch(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500"
+                 />
+                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
               </div>
           </div>
           
