@@ -38,6 +38,32 @@ export default async function handler(
           if (!url || !apiKey) return response.status(400).json({ error: 'Missing URL or API Key' });
 
           try {
+              let targetUrl = url;
+              // Check if input is a username (starts with @ or no slashes)
+              if (!url.includes('http') && !url.includes('warpcast.com')) {
+                  const username = url.replace('@', '');
+                  // Fetch user first
+                  const userRes = await fetch(
+                      `https://api.neynar.com/v2/farcaster/user/by_username?username=${username}`,
+                      { headers: { accept: 'application/json', 'api_key': apiKey } }
+                  );
+                  
+                  if (!userRes.ok) return response.status(404).json({ error: 'User not found' });
+                  const userData = await userRes.json();
+                  const fid = userData.user.fid;
+
+                  // Fetch latest cast
+                  const castRes = await fetch(
+                      `https://api.neynar.com/v2/farcaster/feed/user/${fid}?limit=1`,
+                      { headers: { accept: 'application/json', 'api_key': apiKey } }
+                  );
+                  const castData = await castRes.json();
+                  if (!castData.casts || castData.casts.length === 0) return response.status(404).json({ error: 'No casts found for user' });
+                  
+                  return response.status(200).json(castData.casts[0]);
+              }
+
+              // URL Search
               const neynarRes = await fetch(
                   `https://api.neynar.com/v2/farcaster/cast?identifier=${encodeURIComponent(url)}&type=url`,
                   {
@@ -48,7 +74,7 @@ export default async function handler(
                   }
               );
               
-              if (!neynarRes.ok) return response.status(400).json({ error: 'Failed to fetch cast' });
+              if (!neynarRes.ok) return response.status(400).json({ error: 'Invalid URL or Cast not found' });
               
               const data = await neynarRes.json();
               return response.status(200).json(data.cast);
@@ -58,14 +84,27 @@ export default async function handler(
       }
 
       // 2. Boost Cast (Verify Payment + Store)
-      if (action === 'boost') {
-          const { txHash, cast, duration, fid } = request.body;
-          if (!txHash || !cast || !duration || !fid) {
+      if (action === 'boost' || action === 'burn_boost') {
+          const { txHash, cast, duration, fid, tokenValueUsd } = request.body;
+          if (!txHash || !cast || !fid) {
               return response.status(400).json({ error: 'Missing required fields' });
           }
 
           try {
-              let durationMs = duration === '10m' ? 10 * 60 * 1000 : 30 * 60 * 1000;
+              let durationMs = 0;
+              let boostType = 'paid';
+
+              if (action === 'burn_boost') {
+                  boostType = 'burn';
+                  // Calculate duration based on tokenValueUsd
+                  // Rule: $1 = 10 mins. 
+                  const value = parseFloat(tokenValueUsd || "0");
+                  const minutes = Math.floor(value * 10); // $0.10 = 1 min
+                  durationMs = Math.max(minutes, 1) * 60 * 1000; // Minimum 1 minute
+              } else {
+                  // Paid/Free Boost
+                  durationMs = duration === '10m' ? 10 * 60 * 1000 : 30 * 60 * 1000;
+              }
 
               // Handle Subscriber Free Boost
               if (txHash === 'FREE_BOOST') {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useBalance } from "wagmi";
 import { parseEther, formatEther } from "viem";
 import { ShoppingBag, Zap, Clock, ShieldCheck, Loader2, Wallet } from "lucide-react";
@@ -19,7 +19,22 @@ export function Shop() {
   
   const PRICE_SUB_ETH = "0.005"; 
   const PRICE_TRIAL_ETH = "0.0003"; 
-  const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}`;
+  const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x980E5F15E788Cb653C77781099Fb739d7A1aEEd0";
+
+  const [currentSub, setCurrentSub] = useState<any>(null);
+
+  useEffect(() => {
+    if (context?.user?.fid) {
+        fetch(`/api/stats?fid=${context.user.fid}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.gameData?.subscription) {
+                    setCurrentSub(data.gameData.subscription);
+                }
+            })
+            .catch(console.error);
+    }
+  }, [context?.user?.fid, status]);
 
   const handleBuy = async (item: string, price: string) => {
     if (!isConnected || !PLATFORM_WALLET) return;
@@ -112,12 +127,14 @@ export function Shop() {
         </ul>
 
         <button 
-            disabled={!isConnected || status === "pending" || isConfirming || _sending}
+            disabled={!isConnected || status === "pending" || isConfirming || _sending || (currentSub?.status === 'active' && currentSub?.plan === 'subscription')}
             onClick={() => handleBuy("subscription", PRICE_SUB_ETH)}
             className="w-full bg-white text-purple-900 font-bold py-3 rounded-lg hover:bg-gray-100 disabled:opacity-50 transition flex items-center justify-center space-x-2"
         >
             {(status === "pending" || isConfirming || _sending) && buyingItem === "subscription" ? (
                 <Loader2 className="animate-spin" />
+            ) : currentSub?.status === 'active' && currentSub?.plan === 'subscription' ? (
+                <span>Current Plan</span>
             ) : (
                 <>
                    <span>Subscribe (0.005 ETH)</span>

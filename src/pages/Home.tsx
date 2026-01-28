@@ -18,7 +18,7 @@ type BoostedCast = {
   cast_url: string;
 };
 
-const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x0000000000000000000000000000000000000000";
+const PLATFORM_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x980E5F15E788Cb653C77781099Fb739d7A1aEEd0";
 
 export function Home() {
   const { context } = useFarcaster();
@@ -262,13 +262,13 @@ export function Home() {
         ) : (
             <div className="space-y-4">
                 <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Farcaster Cast URL</label>
+                    <label className="text-xs text-gray-400 mb-1 block">Farcaster Cast URL or Username</label>
                     <div className="flex space-x-2">
                         <input 
                             type="text" 
                             value={previewUrl}
                             onChange={(e) => setPreviewUrl(e.target.value)}
-                            placeholder="https://warpcast.com/..." 
+                            placeholder="Paste URL or username (e.g. @dwr)" 
                             className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                         />
                         <button 

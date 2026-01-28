@@ -14,7 +14,7 @@ export function Burn() {
   const { address, isConnected } = useAccount();
   
   // BURN_WALLET: Use Platform Wallet as the "Specific Wallet" for burning/collection
-  const BURN_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x000000000000000000000000000000000000dEaD";
+  const BURN_WALLET = import.meta.env.NEXT_PUBLIC_PLATFORM_WALLET as `0x${string}` || "0x980E5F15E788Cb653C77781099Fb739d7A1aEEd0";
 
   // Mode: 'burn_only', 'burn_boost', 'recycle'
   const [mode, setMode] = useState<'burn_only' | 'burn_boost' | 'recycle'>('burn_only');
@@ -269,15 +269,16 @@ export function Burn() {
         if (data.success) {
             // If Burn + Boost, now trigger the boost
             if (currentMode === 'burn_boost' && boostPreview) {
+                 const totalValue = selectedTokens.reduce((acc, t) => acc + (t.usdValue || 0) * parseFloat(t.balance), 0);
                  await fetch('/api/boost', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        action: 'burn_boost', // Need to handle this in API
+                        action: 'burn_boost',
                         txHash: hash,
                         cast: boostPreview,
                         fid: context?.user.fid || 0,
-                        tokenValueUsd: selectedTokens.reduce((acc, t) => acc + (t.usdValue || 0) * parseFloat(t.balance), 0)
+                        tokenValueUsd: totalValue.toString()
                     })
                 });
             }
@@ -339,7 +340,7 @@ export function Burn() {
                   className={`flex-1 px-3 py-2 rounded-md text-xs font-bold flex items-center justify-center space-x-1 transition-all ${mode === 'recycle' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
                   <Repeat size={14} />
-                  <span>Recycle</span>
+                  <span>Swap to ETH</span>
               </button>
           </div>
           
@@ -347,9 +348,9 @@ export function Burn() {
               <p className="text-sm text-gray-300 flex items-start space-x-2">
                   <AlertTriangle size={16} className={mode === 'recycle' ? "text-green-400" : "text-red-400"} />
                   <span>
-                      {mode === 'burn_only' && "Transfer tokens to platform wallet for destruction. 150 XP."}
-                      {mode === 'burn_boost' && "Transfer tokens to boost a cast. Higher value = More visibility!"}
-                      {mode === 'recycle' && "Swap tokens for ETH. Recover value but earn less XP."}
+                      {mode === 'burn_only' && "Transfer tokens to burn wallet. Irreversible. Earn 150 XP."}
+                      {mode === 'burn_boost' && "Burn tokens to boost a cast. Value = Boost Power. Earn 150 XP."}
+                      {mode === 'recycle' && "Swap tokens for ETH (Uniswap/Aerodrome). Recover value. Earn 50 XP."}
                   </span>
               </p>
           </div>

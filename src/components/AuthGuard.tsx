@@ -11,7 +11,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // For Phase 2, we allow web access even if not authenticated via Farcaster
+  // We allow web access even if not authenticated via Farcaster
   // The app pages will handle "Connect Wallet" state individually.
   return <>{children}</>;
 }

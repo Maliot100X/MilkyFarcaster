@@ -1,10 +1,10 @@
-# MilkyFarcaster (Phase 2)
+# MilkyFarcaster
 
 MilkyFarcaster is a production-ready Farcaster Mini App on Base Mainnet. It serves as an interactive arcade, utility hub, and AI assistant for Farcaster users.
 
-## Phase 2: Full Production Upgrade
+## Full Production Release
 
-Phase 2 upgrades the application from mocked demos to real on-chain interactions, persistent database storage, and AI agent integration.
+This release upgrades the application from mocked demos to real on-chain interactions, persistent database storage, and AI agent integration.
 
 ### Key Features
 - **Real Burn System**: Burn ETH or ERC-20 tokens (USDC, DEGEN, WETH) on Base to earn XP. Transactions are verified on-chain via backend with idempotency checks.
@@ -107,7 +107,7 @@ The app uses the following tables in Supabase:
    ```
 
 2. **Push to GitHub**
-   Push the `phase-2` branch to your repository.
+   Push the `main` branch to your repository.
 
 3. **Deploy to Vercel**
    - Connect your GitHub repository to Vercel.
