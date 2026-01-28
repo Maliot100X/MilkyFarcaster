@@ -48,8 +48,13 @@ export default async function handler(
     let burnedToken = "ETH";
 
     // ... (Verification logic remains similar)
+    // 2. Check receipt logs for Transfer to DEAD_ADDRESS
+    // We strictly ignore ETH burns (receipt.to === DEAD) as per "DO NOT burn ETH" rule.
+    // We only validate ERC20 Transfer events.
     if (receipt.to?.toLowerCase() === DEAD_ADDRESS) {
-      isValidBurn = true;
+      // Intentionally ignoring native ETH burns to enforce "ERC20 ONLY" rule.
+      // If user burned ETH, it won't be counted for XP.
+      console.warn(`User ${fid} tried to burn ETH directly. Ignored.`);
     } else {
       for (const log of receipt.logs) {
         try {

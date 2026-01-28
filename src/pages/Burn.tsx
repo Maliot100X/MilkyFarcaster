@@ -102,13 +102,6 @@ export function Burn() {
         });
         
         setBurnStatus("fee_confirming");
-        // We wait for fee confirmation ideally, but for UX speed we might proceed if user approves. 
-        // However, prompt requires "Execute transactions in order". We'll assume optimistic sequencing or wait.
-        // Let's wait for basic confirmation or just proceed to burn signature immediately after fee is submitted?
-        // Safer to wait. But `sendTransactionAsync` returns hash. We need to wait for receipt.
-        // For this demo, we'll proceed to burn step immediately after fee submission to avoid double waiting, 
-        // but strictly we should wait. Let's add a small delay or check receipt if possible.
-        // Implementing strict wait might be slow. I'll proceed to burn signature request immediately.
         
         // Step 2: Burn Token (Transfer to DEAD)
         setBurnStatus("burn_pending");
@@ -125,9 +118,8 @@ export function Burn() {
         
         setBurnStatus("burn_confirming");
 
-        // Wait for Burn Receipt (mocking wait loop or using a hook would be better, but we'll just wait for backend verification)
-        // I'll trigger verification after a few seconds delay
-        setTimeout(() => verifyBurn(burnHash), 5000);
+        // Wait for Burn Receipt
+        setTimeout(() => verifyBurn(burnHash, selectedToken.address), 5000);
 
     } catch (error: any) {
         console.error(error);
@@ -136,7 +128,65 @@ export function Burn() {
     }
   };
 
-  const verifyBurn = async (hash: string) => {
+  const handleBurnAll = async () => {
+      if (!isConnected || !balances) return;
+      
+      const tokensToBurn = TRASH_TOKENS.map((token, idx) => {
+          const bal = balances[idx]?.result as bigint;
+          return { ...token, balance: bal };
+      }).filter(t => t.balance && t.balance > 0n);
+
+      if (tokensToBurn.length === 0) {
+          setErrorMessage("No trash tokens found to burn.");
+          return;
+      }
+
+      setErrorMessage("");
+      setBurnStatus("fee_pending");
+
+      try {
+          // 1. Pay Fee (Once for the batch)
+          await sendTransactionAsync({
+              to: PLATFORM_WALLET,
+              value: parseEther(PLATFORM_FEE_ETH),
+          });
+
+          setBurnStatus("burn_pending");
+
+          // 2. Burn Each Token
+          const burnHashes: { hash: `0x${string}`, token: `0x${string}` }[] = [];
+          for (const token of tokensToBurn) {
+              const hash = await sendTransactionAsync({
+                  to: token.address,
+                  data: encodeFunctionData({
+                      abi: erc20Abi,
+                      functionName: 'transfer',
+                      args: [DEAD_ADDRESS, token.balance]
+                  })
+              });
+              burnHashes.push({ hash, token: token.address });
+          }
+
+          setBurnStatus("burn_confirming");
+          
+          // Verify all
+          setTimeout(async () => {
+              setBurnStatus("verifying");
+              for (const { hash, token } of burnHashes) {
+                  await verifyBurn(hash, token, true);
+              }
+              setBurnStatus("success");
+              generateAiCast(`User just burned ${tokensToBurn.length} different trash tokens in one go! Total cleanup on MilkyFarcaster!`);
+          }, 5000);
+
+      } catch (error: any) {
+          console.error(error);
+          setBurnStatus("error");
+          setErrorMessage(error.message || "Batch burn failed");
+      }
+  };
+
+  const verifyBurn = async (hash: string, tokenAddr?: string, skipAi: boolean = false) => {
       setBurnStatus("verifying");
       try {
           const res = await fetch('/api/burn', {
@@ -145,18 +195,18 @@ export function Burn() {
               body: JSON.stringify({ 
                   txHash: hash, 
                   fid: context?.user.fid || 0, // Fallback for web users
-                  tokenAddress: selectedToken?.address 
+                  tokenAddress: tokenAddr || selectedToken?.address 
               })
           });
           
           const data = await res.json();
           if (data.success) {
-              setBurnStatus("success");
+              setBurnStatus("success"); // Note: In batch, this might be called multiple times.
               refetchBalances();
-              generateAiCast();
+              if (!skipAi) generateAiCast();
           } else {
               // Retry verification if backend hasn't indexed yet
-              setTimeout(() => verifyBurn(hash), 3000);
+              setTimeout(() => verifyBurn(hash, tokenAddr, skipAi), 3000);
           }
       } catch (e) {
           console.error("Verification error", e);
@@ -165,15 +215,16 @@ export function Burn() {
       }
   };
 
-  const generateAiCast = async () => {
+  const generateAiCast = async (customContext?: string) => {
     setAiCastText("Generating catchy cast... 🤖");
+    const contextStr = customContext || `User burned ${amount} ${selectedToken?.symbol} ($${amount} USD value) on MilkyFarcaster.`;
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'generate_cast_text',
-          context: `User burned ${amount} ${selectedToken?.symbol} ($${amount} USD value) on MilkyFarcaster.`
+          context: contextStr
         })
       });
       
@@ -186,9 +237,9 @@ export function Burn() {
     } catch (e) {
       // Fallback
       const texts = [
-          `I just purged ${amount} ${selectedToken?.symbol} from my wallet! 🗑️🔥 Bye bye trash! @milkyfarcaster`,
-          `Cleaned up my wallet by burning ${amount} ${selectedToken?.symbol}. Feels good! 🧹✨ @milkyfarcaster`,
-          `Sacrificed ${amount} ${selectedToken?.symbol} to the crypto gods. 🙏🔥 @milkyfarcaster`
+          `I just purged my wallet! 🗑️🔥 Bye bye trash! @milkyfarcaster`,
+          `Cleaned up my wallet by burning trash tokens. Feels good! 🧹✨ @milkyfarcaster`,
+          `Sacrificed trash to the crypto gods. 🙏🔥 @milkyfarcaster`
       ];
       setAiCastText(texts[Math.floor(Math.random() * texts.length)]);
     }
@@ -285,7 +336,56 @@ export function Burn() {
                    </div>
               )}
           </div>
+          
+          {/* Burn All Button */}
+          {!selectedToken && (
+             <button
+                onClick={handleBurnAll}
+                className="w-full mt-4 bg-red-900/30 border border-red-800 text-red-400 font-bold py-3 rounded-xl hover:bg-red-900/50 transition-colors flex items-center justify-center space-x-2"
+             >
+                 <Flame size={18} />
+                 <span>BURN ALL TRASH</span>
+             </button>
+          )}
       </div>
+
+      {/* Batch Burn Status */}
+      {!selectedToken && burnStatus !== "idle" && (
+          <div className="bg-gradient-to-br from-red-900/40 to-orange-900/40 border border-red-500/30 rounded-2xl p-6 mt-4 animate-in slide-in-from-bottom-4">
+              <h3 className="text-xl font-bold text-white mb-4 text-center">Batch Incineration</h3>
+               <div className="flex flex-col items-center justify-center space-y-4">
+                    {burnStatus === "success" ? (
+                        <>
+                            <CheckCircle2 size={48} className="text-green-500" />
+                            <p className="text-green-400 font-bold">All Trash Burned!</p>
+                             <button 
+                                onClick={handleCast}
+                                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl flex items-center justify-center space-x-2"
+                            >
+                                <Share2 size={20} />
+                                <span>Cast Result</span>
+                            </button>
+                             <button 
+                                onClick={() => setBurnStatus("idle")} 
+                                className="mt-2 text-gray-500 text-sm hover:text-gray-300"
+                            >
+                                Done
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                             <Loader2 size={32} className="animate-spin text-orange-500" />
+                             <p className="text-gray-300">
+                                 {burnStatus === "fee_pending" && "Processing Fee..."}
+                                 {burnStatus === "burn_pending" && "Burning Tokens..."}
+                                 {burnStatus === "verifying" && "Verifying Burns..."}
+                             </p>
+                        </>
+                    )}
+               </div>
+               {errorMessage && <p className="text-red-500 text-center mt-2">{errorMessage}</p>}
+          </div>
+      )}
 
       {/* Burn Action Area */}
       {selectedToken && (

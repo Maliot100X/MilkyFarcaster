@@ -13,7 +13,7 @@ export const config = createConfig({
     }),
   ],
   transports: {
-    [base.id]: http(import.meta.env.VITE_BASE_RPC_URL),
+    [base.id]: http(import.meta.env.VITE_BASE_RPC_URL || "https://mainnet.base.org"),
   },
 });
 
