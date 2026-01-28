@@ -38,10 +38,36 @@ export default async function handler(
           if (!url || !apiKey) return response.status(400).json({ error: 'Missing URL or API Key' });
 
           try {
-              let targetUrl = url;
-              // Check if input is a username (starts with @ or no slashes)
+              // Handle Hash directly (starts with 0x)
+              if (url.startsWith('0x')) {
+                 const neynarRes = await fetch(
+                    `https://api.neynar.com/v2/farcaster/cast?identifier=${url}&type=hash`,
+                    { headers: { accept: 'application/json', 'api_key': apiKey } }
+                 );
+                 if (neynarRes.ok) {
+                     const data = await neynarRes.json();
+                     return response.status(200).json(data.cast);
+                 }
+              }
+
+              // Handle Username + Hash (e.g. "username 0x...") or just "0x..." inside text
+              // Simple regex for hash
+              const hashMatch = url.match(/(0x[a-fA-F0-9]{40,})/);
+              if (hashMatch) {
+                 const hash = hashMatch[1];
+                 const neynarRes = await fetch(
+                    `https://api.neynar.com/v2/farcaster/cast?identifier=${hash}&type=hash`,
+                    { headers: { accept: 'application/json', 'api_key': apiKey } }
+                 );
+                 if (neynarRes.ok) {
+                     const data = await neynarRes.json();
+                     return response.status(200).json(data.cast);
+                 }
+              }
+
+              // Handle Username only (no http, no hash)
               if (!url.includes('http') && !url.includes('warpcast.com')) {
-                  const username = url.replace('@', '');
+                  const username = url.replace('@', '').trim();
                   // Fetch user first
                   const userRes = await fetch(
                       `https://api.neynar.com/v2/farcaster/user/by_username?username=${username}`,

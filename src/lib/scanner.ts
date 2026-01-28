@@ -97,8 +97,54 @@ export async function fetchTokenBalances(address: string): Promise<TokenBalance[
   } catch (e) {
     console.error("Scanner failed:", e);
   }
-
   return [];
+}
+
+export async function fetchTokenMetadata(address: string, userAddress: string): Promise<TokenBalance | null> {
+  try {
+    // 1. Get Metadata (Onchain)
+    const client = createPublicClient({
+      chain: base,
+      transport: http()
+    });
+
+    const erc20Abi = parseAbi([
+      'function name() view returns (string)',
+      'function symbol() view returns (string)',
+      'function decimals() view returns (uint8)',
+      'function balanceOf(address) view returns (uint256)'
+    ]);
+
+    const [name, symbol, decimals, balance] = await client.multicall({
+      contracts: [
+        { address: address as `0x${string}`, abi: erc20Abi, functionName: 'name' },
+        { address: address as `0x${string}`, abi: erc20Abi, functionName: 'symbol' },
+        { address: address as `0x${string}`, abi: erc20Abi, functionName: 'decimals' },
+        { address: address as `0x${string}`, abi: erc20Abi, functionName: 'balanceOf', args: [userAddress as `0x${string}`] }
+      ],
+      allowFailure: false
+    });
+
+    const token: TokenBalance = {
+      name: name as string,
+      symbol: symbol as string,
+      address: address as `0x${string}`,
+      decimals: decimals as number,
+      rawBalance: balance as bigint,
+      balance: formatUnits(balance as bigint, decimals as number),
+    };
+
+    // 2. Get Price
+    const prices = await fetchTokenPrices([address]);
+    if (prices[address.toLowerCase()]) {
+      token.usdValue = prices[address.toLowerCase()];
+    }
+
+    return token;
+  } catch (e) {
+    console.error("Failed to fetch token metadata:", e);
+    return null;
+  }
 }
 
 export async function fetchTokenPrices(addresses: string[]): Promise<Record<string, number>> {

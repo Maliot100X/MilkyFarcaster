@@ -5,7 +5,7 @@ import { Flame, Loader2, Wallet, CheckCircle2, Repeat, Rocket, AlertTriangle, Sh
 import { useAccount, useSendTransaction } from "wagmi";
 import { parseEther, encodeFunctionData } from "viem";
 import { useFarcaster } from "../context/FarcasterContext";
-import { fetchTokenBalances, type TokenBalance } from "../lib/scanner";
+import { fetchTokenBalances, fetchTokenMetadata, type TokenBalance } from "../lib/scanner";
 import { ERC20_ABI, AERODROME_ROUTER_ABI, AERODROME_ROUTER_ADDRESS, WETH_ADDRESS, UNISWAP_ROUTER_ABI, UNISWAP_ROUTER_ADDRESS } from "../lib/abis";
 import { SUPPORTED_COINS, type Coin } from "../lib/coins";
 
@@ -25,6 +25,7 @@ export function Burn() {
   // Scanner State
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Selection State
   const [selectedTokens, setSelectedTokens] = useState<TokenBalance[]>([]);
@@ -92,6 +93,27 @@ export function Burn() {
       console.error(e);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleTokenSearch = async (query: string) => {
+    setTokenSearch(query);
+    if (query.startsWith('0x') && query.length === 42) {
+        // Explicit contract search
+        setSearchLoading(true);
+        try {
+            const token = await fetchTokenMetadata(query, address as string);
+            if (token) {
+                // Check if already exists
+                if (!tokens.find(t => t.address.toLowerCase() === token.address.toLowerCase())) {
+                    setTokens(prev => [token, ...prev]);
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setSearchLoading(false);
+        }
     }
   };
 
@@ -517,14 +539,19 @@ export function Burn() {
 
               {/* Token Search */}
               <div className="relative">
+                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                  <input 
                     type="text" 
-                    placeholder="Search by name or contract address..." 
+                    placeholder="Search by symbol or contract address..." 
                     value={tokenSearch}
-                    onChange={(e) => setTokenSearch(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    onChange={(e) => handleTokenSearch(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500"
                  />
-                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                 {searchLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Loader2 className="animate-spin text-blue-500" size={16} />
+                    </div>
+                 )}
               </div>
           </div>
           

@@ -12,24 +12,50 @@ export function Profile() {
   const [profileData, setProfileData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showWalletSelector, setShowWalletSelector] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
+
+  const fetchProfile = async () => {
+    if (!context?.user.fid) return;
+    try {
+      const res = await fetch(`/api/stats?fid=${context.user.fid}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProfileData(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!context?.user.fid) return;
-      try {
-        const res = await fetch(`/api/stats?fid=${context.user.fid}`);
-        if (res.ok) {
-          const data = await res.json();
-          setProfileData(data);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchProfile();
   }, [context?.user.fid]);
+
+  const handleSync = async () => {
+    if (!context?.user.fid) return;
+    setIsSyncing(true);
+    setSyncError("");
+    try {
+        const res = await fetch('/api/sync-farcaster', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fid: context.user.fid })
+        });
+        
+        if (!res.ok) throw new Error("Sync failed");
+        
+        // Refresh profile data
+        await fetchProfile();
+        
+    } catch (e) {
+        setSyncError("Failed to sync. Try again.");
+    } finally {
+        setIsSyncing(false);
+    }
+  };
 
   if (loading) {
       return <div className="flex justify-center py-20"><Loader2 className="animate-spin" /></div>;
@@ -38,6 +64,13 @@ export function Profile() {
   const { gameData, user: neynarUser } = profileData || {};
   const { xp, level, title, totalBurnedUsd, totalSwappedUsd, recentActivity, rank } = gameData || { xp: 0, level: 1, title: 'Novice', totalBurnedUsd: '0.00', totalSwappedUsd: '0.00', recentActivity: [], rank: '-' };
   
+  // Wallet Verification
+  const custodyAddress = neynarUser?.custody_address?.toLowerCase();
+  const verifiedAddresses = (neynarUser?.verifications || []).map((v: string) => v.toLowerCase());
+  const connectedAddress = address?.toLowerCase();
+  
+  const isWalletVerified = connectedAddress && (connectedAddress === custodyAddress || verifiedAddresses.includes(connectedAddress));
+
   // XP Progress Calculation
   const currentLevelBaseXp = Math.pow(level - 1, 2) * 100;
   const nextLevelXp = Math.pow(level, 2) * 100;
@@ -64,7 +97,7 @@ export function Profile() {
         </div>
         
         {/* Wallet Info & Switching */}
-        <div className="w-full max-w-xs">
+        <div className="w-full max-w-xs space-y-2">
           {!isConnected ? (
              <button 
                onClick={() => setShowWalletSelector(!showWalletSelector)}
@@ -74,11 +107,13 @@ export function Profile() {
                <span>Connect Wallet</span>
              </button>
           ) : (
-             <div className="bg-gray-800 p-3 rounded-xl border border-gray-700 flex items-center justify-between">
+             <div className={`p-3 rounded-xl border flex items-center justify-between ${isWalletVerified ? 'bg-gray-800 border-gray-700' : 'bg-red-900/20 border-red-500/50'}`}>
                 <div className="flex items-center space-x-2 overflow-hidden">
-                    <Wallet size={16} className="text-green-400 flex-shrink-0" />
+                    <Wallet size={16} className={`${isWalletVerified ? 'text-green-400' : 'text-red-400'} flex-shrink-0`} />
                     <div className="flex flex-col min-w-0">
-                        <span className="text-xs text-gray-400">Connected with {connector?.name}</span>
+                        <span className="text-xs text-gray-400">
+                            {isWalletVerified ? `Connected with ${connector?.name}` : 'Wallet Mismatch'}
+                        </span>
                         <span className="text-xs font-mono text-white truncate w-32">
                            {address}
                         </span>
@@ -94,6 +129,24 @@ export function Profile() {
                 </div>
              </div>
           )}
+          
+          {/* Sync Farcaster Button */}
+          <button 
+             onClick={handleSync}
+             disabled={isSyncing}
+             className="w-full bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center space-x-2 disabled:opacity-50"
+          >
+             {isSyncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
+             <span>Sync Farcaster Profile</span>
+          </button>
+          
+          {!isWalletVerified && isConnected && (
+              <div className="text-xs text-red-400 text-center bg-red-950/30 p-2 rounded-lg border border-red-900/50">
+                  ⚠️ This wallet is not linked to your Farcaster account. Please connect a verified wallet to burn/boost.
+              </div>
+          )}
+          
+          {syncError && <p className="text-xs text-red-400 text-center">{syncError}</p>}
 
           {/* Wallet Selector Dropdown */}
           {showWalletSelector && (
