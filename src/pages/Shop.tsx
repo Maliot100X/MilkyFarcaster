@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useBalance } from "wagmi";
 import { parseEther, formatEther } from "viem";
-import { ShoppingBag, Zap, Clock, ShieldCheck, Loader2, Wallet, Check } from "lucide-react";
+import { ShoppingBag, Zap, Clock, ShieldCheck, Loader2, Wallet } from "lucide-react";
 import { useFarcaster } from "../context/FarcasterContext";
 
 export function Shop() {

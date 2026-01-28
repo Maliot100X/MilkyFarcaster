@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import sdk from "@farcaster/miniapp-sdk";
-import { Flame, Loader2, Wallet, AlertTriangle, ArrowRight, CheckCircle2, Share2, Search } from "lucide-react";
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useReadContracts, useReadContract } from "wagmi";
-import { parseEther, formatEther, parseUnits, formatUnits, erc20Abi } from "viem";
+import { Flame, Loader2, Wallet, AlertTriangle, CheckCircle2, Share2, Search } from "lucide-react";
+import { useAccount, useSendTransaction, useReadContracts, useReadContract } from "wagmi";
+import { parseEther, parseUnits, formatUnits, erc20Abi, encodeFunctionData } from "viem";
 import { useFarcaster } from "../context/FarcasterContext";
 
 // Hardcoded "Trash" Coins for Base Mainnet
@@ -28,7 +28,6 @@ export function Burn() {
   const [amount, setAmount] = useState("");
   const [burnStatus, setBurnStatus] = useState<"idle" | "fee_pending" | "fee_confirming" | "burn_pending" | "burn_confirming" | "verifying" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  const [txHash, setTxHash] = useState<string | null>(null);
   const [aiCastText, setAiCastText] = useState("");
 
   // Transaction Hooks
@@ -97,7 +96,7 @@ export function Burn() {
         setBurnStatus("fee_pending");
         console.log("Paying platform fee to:", PLATFORM_WALLET);
         
-        const feeHash = await sendTransactionAsync({
+        await sendTransactionAsync({
             to: PLATFORM_WALLET,
             value: parseEther(PLATFORM_FEE_ETH),
         });
@@ -117,17 +116,13 @@ export function Burn() {
         
         const burnHash = await sendTransactionAsync({
             to: selectedToken.address,
-            data: encodeFunctionData(erc20Abi, 'transfer', [DEAD_ADDRESS, burnAmountBigInt])
-        }); // Note: Using sendTransaction with data for transfer is raw. Better to use writeContract if available, 
-            // but sendTransaction works with encoded data.
-            // Wait, useSendTransaction from wagmi v2/v3 is generic.
-            // Actually, for ERC20 transfer, we should use writeContract. 
-            // I'll stick to sendTransaction with data for simplicity if writeContract isn't imported, 
-            // but I should probably use the proper method. 
-            // Let's use `writeContractAsync` if I import it, or just encode data manually.
-            // I'll encode data manually to keep imports clean or import encodeFunctionData.
+            data: encodeFunctionData({
+                abi: erc20Abi,
+                functionName: 'transfer',
+                args: [DEAD_ADDRESS, burnAmountBigInt]
+            })
+        }); 
         
-        setTxHash(burnHash);
         setBurnStatus("burn_confirming");
 
         // Wait for Burn Receipt (mocking wait loop or using a hook would be better, but we'll just wait for backend verification)

@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useFarcaster } from "../context/FarcasterContext";
 import { Flame, Gamepad2, Wallet, Clock, Zap, Loader2, LogOut, RefreshCcw } from "lucide-react";
 import { useAccount, useDisconnect, useConnect } from "wagmi";
-import sdk from "@farcaster/miniapp-sdk";
 
 export function Profile() {
   const { context } = useFarcaster();
@@ -37,7 +36,7 @@ export function Profile() {
   }
 
   const { gameData, user: neynarUser } = profileData || {};
-  const { xp, level, title, totalBurnedUsd, recentActivity } = gameData || { xp: 0, level: 1, title: 'Novice', totalBurnedUsd: '0.00', recentActivity: [] };
+  const { xp, level, title, totalBurnedUsd, recentActivity, rank } = gameData || { xp: 0, level: 1, title: 'Novice', totalBurnedUsd: '0.00', recentActivity: [], rank: '-' };
   
   // XP Progress Calculation
   const currentLevelBaseXp = Math.pow(level - 1, 2) * 100;

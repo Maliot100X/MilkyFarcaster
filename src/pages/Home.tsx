@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Zap, Clock, ExternalLink, Search, Loader2, Share2, AlertCircle } from "lucide-react";
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { Zap, Clock, Search, Loader2, Share2, AlertCircle } from "lucide-react";
+import { useAccount, useSendTransaction } from "wagmi";
 import { parseEther } from "viem";
 import sdk from "@farcaster/miniapp-sdk";
 import { useFarcaster } from "../context/FarcasterContext";
